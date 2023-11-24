@@ -1,0 +1,12 @@
+# Editor directories
+.vscode/
+
+# Compile and runtime directories
+sysroot/
+logs/
+kernel/bin/
+kernel/build/
+
+# Compile and runtime files
+luhos.iso
+*.elf

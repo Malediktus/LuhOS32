@@ -68,7 +68,7 @@ void kernel_main(unsigned long magic, unsigned long addr)
     return;
   }
 
-  uint32_t result = driver_manager_init(framebuffer);
+  uint32_t result = driver_manager_init_early(framebuffer);
   if (result != EOK)
   {
     PANIC_CODE(kprint_color("failed to initialize driver manager. error: ", 0xf4); kprint_color(string_error(result), 0xf4); kprint_color("\n", 0xf4));
@@ -117,6 +117,20 @@ void kernel_main(unsigned long magic, unsigned long addr)
   void *heap_virtual_start = get_largest_memory_hole(mmap, mmap_size, &heap_size_bytes);
 
   heap_init(heap_virtual_start, heap_size_bytes / PAGE_SIZE, kernel_page_directory);
+
+  result = driver_manager_init();
+  if (result != EOK)
+  {
+    PANIC_CODE(kprint_color("failed to initialize driver manager. error: ", 0xf4); kprint_color(string_error(result), 0xf4); kprint_color("\n", 0xf4));
+  }
+
+  uint32_t num_disks = get_num_disks();
+  if (num_disks < 1)
+  {
+    PANIC_PRINT("no disks identified");
+  }
+
+  disk_t **disks = get_disks();
 
   kprint("reached end of kernel init routine\n");
 

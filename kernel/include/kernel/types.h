@@ -31,6 +31,7 @@ void kprint_color(const char *message, uint8_t color);
 #define EUNIMP 7
 #define EISTKN 8
 #define EINFORMAT 9
+#define EHRDWRE 10
 
 const char *string_error(uint32_t error); // defined in ascii.c
 

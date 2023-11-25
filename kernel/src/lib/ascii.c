@@ -26,7 +26,8 @@ static const char *ErrorString[] = {
     "ERDONLY",
     "EUNIMP",
     "EISTKN",
-    "EINFORMAT"};
+    "EINFORMAT",
+    "EHRDWRE"};
 
 const char *string_error(uint32_t error)
 {

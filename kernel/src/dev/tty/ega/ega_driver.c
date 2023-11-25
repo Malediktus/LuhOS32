@@ -2,7 +2,7 @@
 
 uint32_t ega_driver_init(driver_t *driver, struct multiboot_tag_framebuffer *framebuffer)
 {
-  driver->type = DRIVER_TYPE_TTY;
+  driver->type = DRIVER_TYPE_EGA;
   driver->private_data = framebuffer;
 
   return EOK;

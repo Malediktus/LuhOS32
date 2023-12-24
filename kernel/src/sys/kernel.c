@@ -132,15 +132,11 @@ void kernel_main(unsigned long magic, unsigned long addr)
 
   disk_t **disks = get_disks();
 
-  /*
-  next things to do:
-  - disk partitions
-  - rework disk id system
-  - vfs
-  - fat32 implementation
-  */
-
   kprint("reached end of kernel init routine\n");
+  kprint("\033[40m A \033[41m B \033[42m C \033[43m D \033[0m");
+  kprint("\033[44m A \033[45m B \033[46m C \033[47m D \033[0m");
+  kprint("\033[40;1m A \033[41;1m B \033[42;1m C \033[43;1m D \033[0m");
+  kprint("\033[44;1m A \033[45;1m B \033[46;1m C \033[47;1m D \033[0m");
 
   while (true)
   {

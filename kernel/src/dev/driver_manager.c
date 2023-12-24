@@ -1,6 +1,7 @@
 #include <kernel/dev/driver_manager.h>
 #include <kernel/dev/tty/ega.h>
 #include <kernel/dev/disk/ide.h>
+#include <kernel/lib/cast.h>
 
 static driver_t drivers[MAX_DRIVERS];
 static uint8_t num_drivers;
@@ -12,6 +13,7 @@ uint32_t driver_manager_init_early(struct multiboot_tag_framebuffer *framebuffer
 {
   uint32_t result = EOK;
   num_drivers = 0;
+  num_disks = 0;
 
   switch (framebuffer->common.framebuffer_type)
   {

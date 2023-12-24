@@ -132,6 +132,14 @@ void kernel_main(unsigned long magic, unsigned long addr)
 
   disk_t **disks = get_disks();
 
+  /*
+  next things to do:
+  - disk partitions
+  - rework disk id system
+  - vfs
+  - fat32 implementation
+  */
+
   kprint("reached end of kernel init routine\n");
 
   while (true)

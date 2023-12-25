@@ -1,6 +1,7 @@
 #include <kernel/dev/driver_manager.h>
 #include <kernel/dev/tty/ega.h>
 #include <kernel/dev/disk/ide.h>
+#include <kernel/dev/input/keyboard.h>
 #include <kernel/lib/cast.h>
 
 static driver_t drivers[MAX_DRIVERS];
@@ -46,6 +47,13 @@ uint32_t driver_manager_init()
   }
 
   num_disks += num_ide_disks;
+  num_drivers++;
+
+  result = keyboard_init(&drivers[num_drivers]);
+  if (result != EOK)
+  {
+    goto out;
+  }
   num_drivers++;
 
 out:
@@ -207,4 +215,14 @@ uint32_t driver_manager_write_tty(uint32_t x, uint32_t y, uint8_t color, const c
 
 out:
   return result;
+}
+
+uint32_t driver_manager_get_key()
+{
+  return keyboard_get_key();
+}
+
+uint32_t driver_manager_get_key_modifiers()
+{
+  return keyboard_get_key_modifiers();
 }

@@ -71,7 +71,7 @@ void kernel_main(unsigned long magic, unsigned long addr)
   uint32_t result = driver_manager_init_early(framebuffer);
   if (result != EOK)
   {
-    PANIC_CODE(kprintf("failed to initialize driver manager. error: %s\n", string_error(result)));
+    PANIC_CODE(kprintf("failed to initialize early driver manager. error: %s\n", string_error(result)));
   }
 
   clear_tty();
@@ -131,6 +131,22 @@ void kernel_main(unsigned long magic, unsigned long addr)
   disk_t **disks = get_disks();
 
   kprintf("\033[40m  \033[41m  \033[42m  \033[43m  \033[44m  \033[45m  \033[46m  \033[47m  \033[40;1m  \033[41;1m  \033[42;1m  \033[43;1m  \033[44;1m  \033[45;1m  \033[46;1m  \033[47;1m  \033[0m\n");
+  kprintf("\033[32mWelcome to LuhOS. This is a work in progress kernel shell. Have fun!\033[0m\n");
+  kprintf("<\033[31mluh32\033[0m@\033[34;1mkernel\033[0m>$ ");
+
+  while (true)
+  {
+    uint32_t key = driver_manager_get_key();
+    if (key != NULL_KEY)
+    {
+      uint8_t ascii_key = key_code_to_ascii(key);
+      if (ascii_key == 0)
+      {
+        continue;
+      }
+      kprintf("%c", ascii_key);
+    }
+  }
 
   while (true)
   {

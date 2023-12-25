@@ -1,5 +1,6 @@
 #include <kernel/tty.h>
 #include <kernel/lib/cast.h>
+#include <stdarg.h>
 
 static uint32_t row;
 static uint32_t col;
@@ -104,6 +105,27 @@ static uint8_t ansi_color_to_tty_color(uint8_t ansi_state, bool bright)
   }
 }
 
+static void kput_char(char c)
+{
+  uint32_t result = driver_manager_write_tty(col, row, current_color, c);
+  if (result != EOK)
+  {
+    while (true)
+    {
+      // Can't print panic message, because printing faults
+      asm("cli");
+      asm("hlt");
+    }
+  }
+  col++;
+  if (col >= driver_manager_get_width())
+  {
+    col = 0;
+    row++;
+    // TODO: Scroll
+  }
+}
+
 void clear_tty()
 {
   for (uint32_t y = 0; y < driver_manager_get_height(); y++)
@@ -113,7 +135,12 @@ void clear_tty()
       uint32_t result = driver_manager_write_tty(x, y, TTY_COLOR(TTY_WHITE, TTY_BG_BLACK), ' ');
       if (result != EOK)
       {
-        PANIC_CODE(kprint_color("failed to write to tty. error: ", 0xf4); kprint_color(string_error(result), 0xf4); kprint_color("\n", 0xf4));
+        while (true)
+        {
+          // Can't print panic message, because printing faults
+          asm("cli");
+          asm("hlt");
+        }
       }
     }
   }
@@ -136,19 +163,7 @@ void kprint_at_color(const char *message, uint32_t _col, uint32_t _row, uint8_t 
     {
       for (uint8_t j = 0; j < 4; j++)
       {
-        if (col >= driver_manager_get_width())
-        {
-          col = 0;
-          row++;
-          // TODO: Scroll
-          break;
-        }
-        uint32_t result = driver_manager_write_tty(col, row, color, ' ');
-        if (result != EOK)
-        {
-          PANIC_CODE(kprint_color("failed to write to tty. error: ", 0xf4); kprint_color(string_error(result), 0xf4); kprint_color("\n", 0xf4));
-        }
-        col++;
+        kput_char(' ');
       }
       continue;
     }
@@ -160,19 +175,7 @@ void kprint_at_color(const char *message, uint32_t _col, uint32_t _row, uint8_t 
       continue;
     }
 
-    uint32_t result = driver_manager_write_tty(col, row, color, message[i]);
-    if (result != EOK)
-    {
-      PANIC_CODE(kprint_color("failed to write to tty. error: ", 0xf4); kprint_color(string_error(result), 0xf4); kprint_color("\n", 0xf4));
-    }
-
-    col++;
-    if (col >= driver_manager_get_width())
-    {
-      col = 0;
-      row++;
-      // TODO: Scroll
-    }
+    kput_char(message[i]);
   }
 }
 
@@ -192,19 +195,7 @@ void kprint_at(const char *message, uint32_t _col, uint32_t _row)
     {
       for (uint8_t j = 0; j < 4; j++)
       {
-        if (col >= driver_manager_get_width())
-        {
-          col = 0;
-          row++;
-          // TODO: Scroll
-          break;
-        }
-        uint32_t result = driver_manager_write_tty(col, row, current_color, ' ');
-        if (result != EOK)
-        {
-          PANIC_CODE(kprint_color("failed to write to tty. error: ", 0xf4); kprint_color(string_error(result), 0xf4); kprint_color("\n", 0xf4));
-        }
-        col++;
+        kput_char(' ');
       }
       continue;
     }
@@ -223,10 +214,9 @@ void kprint_at(const char *message, uint32_t _col, uint32_t _row)
       {
         if (message[i] == 'm')
         {
-          i++;
           break;
         }
-        if (message[i] == ';')
+        else if (message[i] == ';')
         {
           bright = true;
           i++;
@@ -239,7 +229,6 @@ void kprint_at(const char *message, uint32_t _col, uint32_t _row)
           {
             goto out;
           }
-          i++;
           break;
         }
 
@@ -271,6 +260,7 @@ void kprint_at(const char *message, uint32_t _col, uint32_t _row)
         current_color = TTY_COLOR(current_fg_color, current_bg_color);
       }
     out:
+      continue;
     }
     else if (message[i] == '\n')
     {
@@ -280,23 +270,178 @@ void kprint_at(const char *message, uint32_t _col, uint32_t _row)
       continue;
     }
 
-    uint32_t result = driver_manager_write_tty(col, row, current_color, message[i]);
-    if (result != EOK)
-    {
-      PANIC_CODE(kprint_color("failed to write to tty. error: ", 0xf4); kprint_color(string_error(result), 0xf4); kprint_color("\n", 0xf4));
-    }
-
-    col++;
-    if (col >= driver_manager_get_width())
-    {
-      col = 0;
-      row++;
-      // TODO: Scroll
-    }
+    kput_char(message[i]);
   }
 }
 
 void kprint(const char *message)
 {
   kprint_at(message, col, row);
+}
+
+void kprintf(const char *fmt, ...)
+{
+  va_list args;
+  va_start(args, fmt);
+
+  while (*fmt != '\0')
+  {
+    if (*fmt != '%')
+    {
+      if (*fmt == '\t')
+      {
+        for (uint8_t j = 0; j < 4; j++)
+        {
+          kput_char(' ');
+        }
+        fmt++;
+      }
+      else if (*fmt == '\033')
+      {
+        fmt++;
+        if (*fmt != '[')
+        {
+          continue;
+        }
+        fmt++;
+
+        uint8_t code = 0;
+        bool bright = false;
+        for (uint8_t j = 0; j < 50; j++)
+        {
+          if (*fmt == 'm')
+          {
+            fmt++;
+            break;
+          }
+          if (*fmt == ';')
+          {
+            bright = true;
+            fmt++;
+            if (*fmt != '1')
+            {
+              goto out;
+            }
+            fmt++;
+            if (*fmt != 'm')
+            {
+              goto out;
+            }
+            fmt++;
+            break;
+          }
+
+          if (!(*fmt >= '0' && *fmt <= '9'))
+          {
+            goto out;
+          }
+          code *= 10;
+          code += *fmt - '0';
+          fmt++;
+        }
+
+        if (code == 0)
+        {
+          current_fg_color = TTY_WHITE;
+          current_bg_color = TTY_BG_BLACK;
+          current_color = TTY_COLOR(TTY_WHITE, TTY_BG_BLACK);
+          goto out;
+        }
+
+        if (code < 40)
+        {
+          current_fg_color = ansi_color_to_tty_color(code, bright);
+          current_color = TTY_COLOR(current_fg_color, current_bg_color);
+        }
+        else
+        {
+          current_bg_color = ansi_color_to_tty_color(code, bright);
+          current_color = TTY_COLOR(current_fg_color, current_bg_color);
+        }
+      out:
+      }
+      else if (*fmt == '\n')
+      {
+        col = 0;
+        row++;
+        fmt++;
+        // TODO: Scroll
+      }
+      else
+      {
+        kput_char(*fmt++);
+      }
+    }
+    else
+    {
+      switch (*++fmt)
+      {
+      case 'd':
+      case 'i':
+      {
+        char buf[20];
+        int32_t value = va_arg(args, int32_t);
+        int32_to_string(value, buf);
+        kprint(buf);
+        break;
+      }
+      case 's':
+      {
+        kprint(va_arg(args, char *));
+        break;
+      }
+      case 'c':
+      {
+        char c = (char)va_arg(args, uint32_t);
+        if (c == '\t')
+        {
+          for (uint8_t j = 0; j < 4; j++)
+          {
+            kput_char(' ');
+          }
+        }
+        else if (c == '\n')
+        {
+          col = 0;
+          row++;
+          // TODO: Scroll
+        }
+        else
+        {
+          kput_char(c);
+        }
+        break;
+      }
+      case 'x':
+      case 'X':
+      {
+        char buf[20];
+        uint32_t value = va_arg(args, uint32_t);
+        uint32_to_hex_string(value, buf);
+        kprint(buf);
+        break;
+      }
+      case 'p':
+      {
+        char buf[20];
+        uint32_t value = va_arg(args, uintptr_t);
+        uint32_to_hex_string(value, buf);
+        kprint(buf);
+        break;
+      }
+      case '%':
+      {
+        kput_char('%');
+        break;
+      }
+      default:
+      {
+        break;
+      }
+      }
+      fmt++;
+    }
+  }
+
+  va_end(args);
 }

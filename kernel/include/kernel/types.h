@@ -5,18 +5,17 @@
 #include <stddef.h>
 #include <stdbool.h>
 
-void kprint_color(const char *message, uint8_t color);
+void kprintf(const char *message, ...);
 
-#define PANIC_PRINT(msg)                                                \
-  kprint_color("kernel panic... the system can not continue:\n", 0xf4); \
-  kprint_color(msg, 0xf4);                                              \
-  while (true)                                                          \
+#define PANIC_PRINT(msg)                                                    \
+  kprintf("\033[41mkernel panic... the system can not continue:%s\n", msg); \
+  while (true)                                                              \
     ;
 
-#define PANIC_CODE(code)                                                \
-  kprint_color("kernel panic... the system can not continue:\n", 0xf4); \
-  code;                                                                 \
-  while (true)                                                          \
+#define PANIC_CODE(code)                                             \
+  kprintf("\033[41mkernel panic... the system can not continue:\n"); \
+  code;                                                              \
+  while (true)                                                       \
     ;
 
 #define PAGE_SIZE 4096

@@ -71,24 +71,22 @@ void kernel_main(unsigned long magic, unsigned long addr)
   uint32_t result = driver_manager_init_early(framebuffer);
   if (result != EOK)
   {
-    PANIC_CODE(kprint_color("failed to initialize driver manager. error: ", 0xf4); kprint_color(string_error(result), 0xf4); kprint_color("\n", 0xf4));
+    PANIC_CODE(kprintf("failed to initialize driver manager. error: %s\n", string_error(result)));
   }
 
   clear_tty();
   result = segmentation_init();
   if (result != EOK)
   {
-    PANIC_CODE(kprint_color("failed to initialize segmentation. error: ", 0xf4); kprint_color(string_error(result), 0xf4); kprint_color("\n", 0xf4));
+    PANIC_CODE(kprintf("failed to initialize segmentation. error: %s\n", string_error(result)));
   }
 
-  kprint("kernel booted from ");
-  kprint(bootloader_name);
-  kprint("\n");
+  kprintf("kernel booted from %s\n", bootloader_name);
 
   result = interrupts_init();
   if (result != EOK)
   {
-    PANIC_CODE(kprint_color("failed to initialize interrupts. error: ", 0xf4); kprint_color(string_error(result), 0xf4); kprint_color("\n", 0xf4));
+    PANIC_CODE(kprintf("failed to initialize interrupts. error: %s\n", string_error(result)));
   }
 
   enable_interrupts();
@@ -96,7 +94,7 @@ void kernel_main(unsigned long magic, unsigned long addr)
   result = page_alloc_init(mmap, mmap_size);
   if (result != EOK)
   {
-    PANIC_CODE(kprint_color("failed to initialize page allocator. error: ", 0xf4); kprint_color(string_error(result), 0xf4); kprint_color("\n", 0xf4));
+    PANIC_CODE(kprintf("failed to initialize page allocator. error: %s\n", string_error(result)));
   }
 
   for (uint32_t i = ((uint32_t)&_kernel_start / PAGE_SIZE); i <= ((uint32_t)&_kernel_end / PAGE_SIZE); i++)
@@ -121,7 +119,7 @@ void kernel_main(unsigned long magic, unsigned long addr)
   result = driver_manager_init();
   if (result != EOK)
   {
-    PANIC_CODE(kprint_color("failed to initialize driver manager. error: ", 0xf4); kprint_color(string_error(result), 0xf4); kprint_color("\n", 0xf4));
+    PANIC_CODE(kprintf("failed to initialize driver manager. error: %s\n", string_error(result)));
   }
 
   uint32_t num_disks = get_num_disks();
@@ -132,11 +130,7 @@ void kernel_main(unsigned long magic, unsigned long addr)
 
   disk_t **disks = get_disks();
 
-  kprint("reached end of kernel init routine\n");
-  kprint("\033[40m A \033[41m B \033[42m C \033[43m D \033[0m");
-  kprint("\033[44m A \033[45m B \033[46m C \033[47m D \033[0m");
-  kprint("\033[40;1m A \033[41;1m B \033[42;1m C \033[43;1m D \033[0m");
-  kprint("\033[44;1m A \033[45;1m B \033[46;1m C \033[47;1m D \033[0m");
+  kprintf("\033[40m  \033[41m  \033[42m  \033[43m  \033[44m  \033[45m  \033[46m  \033[47m  \033[40;1m  \033[41;1m  \033[42;1m  \033[43;1m  \033[44;1m  \033[45;1m  \033[46;1m  \033[47;1m  \033[0m\n");
 
   while (true)
   {

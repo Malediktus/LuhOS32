@@ -160,13 +160,7 @@ static const char *exception_messages[] = {
 
 void isr_handler(registers_t r)
 {
-  PANIC_CODE(kprint_color("received interrupt: ", 0xf4);
-             char s[3];
-             int_to_ascii(r.int_no, s);
-             kprint_color(s, 0xf4);
-             kprint_color("\n", 0xf4);
-             kprint_color(exception_messages[r.int_no], 0xf4);
-             kprint_color(" exception\n", 0xf4));
+  PANIC_CODE(kprintf("received interrupt: %i\n%s exception\n", r.int_no, exception_messages[r.int_no]));
 }
 
 static isr_t interrupt_handlers[256];

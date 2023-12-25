@@ -38,43 +38,34 @@ uint32_t page_alloc_init(struct multiboot_tag_mmap *mmap, uint32_t mmap_size)
   memset(&page_allocator, 0, sizeof(struct page_allocator_info));
   uint32_t max_addr = 0;
 
-  kprint("memory map received from bootloader:\n");
+  kprintf("memory map received from bootloader:\n");
   for (struct multiboot_mmap_entry *entry = mmap->entries;
        (multiboot_uint8_t *)entry < (multiboot_uint8_t *)mmap + mmap_size;
        entry = (multiboot_memory_map_t *)((unsigned long)entry + mmap->entry_size))
   {
-    char hex_string[9];
-    uint32_to_hex_string((uint32_t)(entry->addr), hex_string);
-    kprint("  entry 0x");
-    kprint(hex_string);
-    kprint(", ");
-
-    uint32_to_hex_string((uint32_t)(entry->len), hex_string);
-    kprint("size 0x");
-    kprint(hex_string);
-    kprint(", ");
+    kprintf("\tentry 0x%x, size 0x%x, ", (uint32_t)(entry->addr), (uint32_t)(entry->len));
 
     switch (entry->type)
     {
     case MULTIBOOT_MEMORY_AVAILABLE:
-      kprint("AVAILABLE");
+      kprintf("AVAILABLE");
       break;
     case MULTIBOOT_MEMORY_RESERVED:
-      kprint("RESERVED");
+      kprintf("RESERVED");
       break;
     case MULTIBOOT_MEMORY_ACPI_RECLAIMABLE:
-      kprint("ACPI_RECLAIMABLE");
+      kprintf("ACPI_RECLAIMABLE");
       break;
     case MULTIBOOT_MEMORY_NVS:
-      kprint("NVS");
+      kprintf("NVS");
       break;
     case MULTIBOOT_MEMORY_BADRAM:
-      kprint("BADRAM");
+      kprintf("BADRAM");
       break;
     default:
       PANIC_PRINT("invalid type value in mmap entry");
     }
-    kprint("\n");
+    kprintf("\n");
 
     uint32_t end_addr = entry->addr + entry->len;
     if (end_addr > max_addr && entry->type == MULTIBOOT_MEMORY_AVAILABLE)
@@ -83,12 +74,7 @@ uint32_t page_alloc_init(struct multiboot_tag_mmap *mmap, uint32_t mmap_size)
 
   page_allocator.num_pages = max_addr / PAGE_SIZE;
   uint32_t bitmap_size = (page_allocator.num_pages + 8 - 1) / 8;
-
-  char hex_string[9];
-  uint32_to_hex_string(bitmap_size, hex_string);
-  kprint("page allocator bitmap size 0x");
-  kprint(hex_string);
-  kprint("\n");
+  kprintf("page allocator bitmap size 0x%x\n", bitmap_size);
 
   page_allocator.bitmap = (uint32_t *)max_addr;
 
@@ -114,10 +100,7 @@ uint32_t page_alloc_init(struct multiboot_tag_mmap *mmap, uint32_t mmap_size)
     goto out;
   }
 
-  uint32_to_hex_string((uint32_t)(page_allocator.bitmap), hex_string);
-  kprint("page allocator bitmap located at 0x");
-  kprint(hex_string);
-  kprint("\n");
+  kprintf("page allocator bitmap located at 0x%x\n", (uint32_t)(page_allocator.bitmap));
 
   memset(page_allocator.bitmap, 0xFF, bitmap_size);
 

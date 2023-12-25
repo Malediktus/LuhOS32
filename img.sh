@@ -17,8 +17,8 @@ menuentry "LuhOS 32Bit" {
 }
 EOF
 
-# grub-mkrescue -o luhos.iso sysroot
-
+grub-mkrescue -o luhos.iso sysroot
+: '
 dd if=/dev/zero of=luhos.img bs=512 count=131072
 
 fdisk luhos.img << EOF
@@ -45,3 +45,4 @@ sudo grub-install --root-directory=/mnt --target=i386-pc --no-floppy --modules="
 sudo umount /mnt
 sudo losetup -d /dev/loop0
 sudo losetup -d /dev/loop1
+'

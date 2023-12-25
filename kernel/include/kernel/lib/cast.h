@@ -8,31 +8,12 @@ void uint32_to_hex_string(uint32_t value, char *hex_string);
 void uint16_to_hex_string(uint16_t value, char *hex_string);
 void uint8_to_hex_string(uint8_t value, char *hex_string);
 
-#define PRINT_UINT8_HEX(prefix, value) \
-  {                                    \
-    char str[9];                       \
-    uint8_to_hex_string(value, str);   \
-    kprint(prefix "0x");               \
-    kprint(str);                       \
-    kprint("\n");                      \
-  }
+void uint32_to_string(uint32_t value, char *str);
+void uint16_to_string(uint16_t value, char *str);
+void uint8_to_string(uint8_t value, char *str);
 
-#define PRINT_UINT16_HEX(prefix, value) \
-  {                                     \
-    char str[9];                        \
-    uint16_to_hex_string(value, str);   \
-    kprint(prefix "0x");                \
-    kprint(str);                        \
-    kprint("\n");                       \
-  }
-
-#define PRINT_UINT32_HEX(prefix, value) \
-  {                                     \
-    char str[9];                        \
-    uint32_to_hex_string(value, str);   \
-    kprint(prefix "0x");                \
-    kprint(str);                        \
-    kprint("\n");                       \
-  }
+void int32_to_string(int32_t value, char *str);
+void int16_to_string(int16_t value, char *str);
+void int8_to_string(int8_t value, char *str);
 
 #endif

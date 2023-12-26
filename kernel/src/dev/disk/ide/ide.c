@@ -111,12 +111,7 @@ typedef struct
 {
   uint16_t bus;
   uint8_t flags;
-} ide_device_t;
-
-typedef struct
-{
-  ide_device_t devices[8];
-} ide_private_data_t;
+} ide_device_private_data_t;
 
 static uint16_t ide_buses[] = {0x1F0,
                                0x1F0,
@@ -155,98 +150,103 @@ static int ata_wait(uint16_t bus, int advanced)
   {
     status = port_byte_in(bus + ATA_REG_STATUS);
     if (status & ATA_SR_ERR)
+    {
       return 1;
+    }
     if (status & ATA_SR_DF)
+    {
       return 1;
+    }
     if (!(status & ATA_SR_DRQ))
+    {
       return 1;
+    }
   }
 
   return 0;
 }
 
-static void ide_device_identify(ide_device_t *ide_device)
+static uint32_t ide_device_identify(uint16_t bus, uint8_t flags)
 {
-  port_byte_out(ide_device->bus + 1, 1);
-  port_byte_out(ide_device->bus + 0x306, 0);
+  port_byte_out(bus + 1, 1);
+  port_byte_out(bus + 0x306, 0);
 
-  ata_select(ide_device->bus + ATA_REG_HDDEVSEL, ide_device->flags & IDE_DEVICE_FLAG_MASTER);
-  ata_io_wait(ide_device->bus);
+  ata_select(bus + ATA_REG_HDDEVSEL, flags & IDE_DEVICE_FLAG_MASTER);
+  ata_io_wait(bus);
 
-  port_byte_out(ide_device->bus + ATA_REG_COMMAND, ATA_CMD_IDENTIFY);
+  port_byte_out(bus + ATA_REG_COMMAND, ATA_CMD_IDENTIFY);
 
-  ata_io_wait(ide_device->bus);
+  ata_io_wait(bus);
 
-  int status = port_byte_in(ide_device->bus + ATA_REG_COMMAND);
+  int status = port_byte_in(bus + ATA_REG_COMMAND);
   if (status == 0x00) // Device not present
   {
-    return;
+    return 0;
   }
 
-  ata_wait_ready(ide_device->bus);
+  ata_wait_ready(bus);
 
   ata_identify_t device;
   uint16_t *buf = (uint16_t *)&device;
 
   for (int i = 0; i < 256; ++i)
   {
-    buf[i] = port_word_in(ide_device->bus);
+    buf[i] = port_word_in(bus);
   }
 
-  uint8_t *ptr = (uint8_t *)&device.model;
-  for (int i = 0; i < 39; i += 2)
-  {
-    uint8_t tmp = ptr[i + 1];
-    ptr[i + 1] = ptr[i];
-    ptr[i] = tmp;
-  }
+  port_byte_out(bus + ATA_REG_CONTROL, 0x02);
 
-  ide_device->flags |= IDE_DEVICE_FLAG_PRESENT;
-
-  port_byte_out(ide_device->bus + ATA_REG_CONTROL, 0x02);
+  return buf[60] | (buf[61] << 16);
 }
 
-uint32_t ide_driver_init(driver_t *driver, disk_t **disks, uint8_t *num_ide_disks)
+uint32_t ide_driver_init()
 {
-  *num_ide_disks = 0;
+  return EOK;
+}
 
-  driver->type = DRIVER_TYPE_IDE;
-  driver->private_data = kmalloc(sizeof(ide_private_data_t));
-
-  ide_private_data_t *private_data = (ide_private_data_t *)driver->private_data;
-
+uint32_t ide_driver_scan_disks()
+{
   for (uint8_t i = 0; i < 4; i++)
   {
-    private_data->devices[i].bus = ide_buses[i];
-    private_data->devices[i].flags = 0x00;
+    uint16_t bus = ide_buses[i];
+    uint8_t flags = 0x00;
     if (i % 2)
     {
-      private_data->devices[i].flags = IDE_DEVICE_FLAG_MASTER;
+      flags = IDE_DEVICE_FLAG_MASTER;
       // TODO: Fix master devices
       continue;
     }
 
-    ide_device_identify(&private_data->devices[i]);
+    uint32_t num_sectors = ide_device_identify(bus, flags);
 
-    if (private_data->devices[i].flags & IDE_DEVICE_FLAG_PRESENT)
+    if (num_sectors == 0)
     {
-      disk_t *disk = kmalloc(sizeof(disk_t));
-      disk->driver_type = DRIVER_TYPE_IDE;
-      disk->id = i + IDE_DRIVER_DISK_ID_OFFSET;
-
-      disks[*num_ide_disks] = disk;
-
-      (*num_ide_disks)++;
+      continue;
     }
+
+    ide_device_private_data_t *private_data = kmalloc(sizeof(ide_device_private_data_t));
+    private_data->bus = bus;
+    private_data->flags = flags | IDE_DEVICE_FLAG_PRESENT;
+
+    block_device_t *bdev = kmalloc(sizeof(block_device_t));
+    bdev->block_size = 512;
+    bdev->total_blocks = num_sectors;
+
+    bdev->implementation.read_block = ide_read_block;
+    bdev->implementation.write_block = ide_write_block;
+    bdev->implementation.private_data = private_data;
+
+    register_block_device(bdev);
   }
 
   return EOK;
 }
 
-uint32_t ide_driver_write_sector(disk_t *disk, uint32_t lba, uint8_t *buf)
+uint32_t ide_write_block(block_device_t *bdev, uint32_t lba, uint8_t *buf)
 {
-  bool master = !((disk->id - IDE_DRIVER_DISK_ID_OFFSET) % 2);
-  uint16_t bus = ide_buses[disk->id - IDE_DRIVER_DISK_ID_OFFSET];
+  ide_device_private_data_t *private_data = bdev->implementation.private_data;
+  bool master = private_data->flags & IDE_DEVICE_FLAG_MASTER;
+  uint16_t bus = private_data->bus;
 
   port_byte_out(bus + ATA_REG_CONTROL, 0x02);
 
@@ -275,10 +275,11 @@ uint32_t ide_driver_write_sector(disk_t *disk, uint32_t lba, uint8_t *buf)
   return EOK;
 }
 
-uint32_t ide_driver_read_sector(disk_t *disk, uint32_t lba, uint8_t *buf)
+uint32_t ide_read_block(block_device_t *bdev, uint32_t lba, uint8_t *buf)
 {
-  bool master = !((disk->id - IDE_DRIVER_DISK_ID_OFFSET) % 2);
-  uint16_t bus = ide_buses[disk->id - IDE_DRIVER_DISK_ID_OFFSET];
+  ide_device_private_data_t *private_data = bdev->implementation.private_data;
+  bool master = private_data->flags & IDE_DEVICE_FLAG_MASTER;
+  uint16_t bus = private_data->bus;
 
   port_byte_out(bus + ATA_REG_CONTROL, 0x02);
 

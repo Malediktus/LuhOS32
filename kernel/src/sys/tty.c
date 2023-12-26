@@ -105,6 +105,18 @@ static uint8_t ansi_color_to_tty_color(uint8_t ansi_state, bool bright)
   }
 }
 
+static void scroll_screen()
+{
+  if (row < driver_manager_get_height())
+  {
+    return;
+  }
+
+  driver_manager_scroll_line();
+  col = 0;
+  row--;
+}
+
 static void kput_char(char c)
 {
   uint32_t result = driver_manager_write_tty(col, row, current_color, c);
@@ -122,7 +134,7 @@ static void kput_char(char c)
   {
     col = 0;
     row++;
-    // TODO: Scroll
+    scroll_screen();
   }
 }
 
@@ -171,7 +183,7 @@ void kprint_at_color(const char *message, uint32_t _col, uint32_t _row, uint8_t 
     {
       col = 0;
       row++;
-      // TODO: Scroll
+      scroll_screen();
       continue;
     }
 
@@ -266,7 +278,7 @@ void kprint_at(const char *message, uint32_t _col, uint32_t _row)
     {
       col = 0;
       row++;
-      // TODO: Scroll
+      scroll_screen();
       continue;
     }
 
@@ -365,7 +377,7 @@ void kprintf(const char *fmt, ...)
         col = 0;
         row++;
         fmt++;
-        // TODO: Scroll
+        scroll_screen();
       }
       else
       {
@@ -404,7 +416,7 @@ void kprintf(const char *fmt, ...)
         {
           col = 0;
           row++;
-          // TODO: Scroll
+          scroll_screen();
         }
         else
         {

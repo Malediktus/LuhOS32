@@ -11,6 +11,9 @@
 #include <kernel/page_allocator.h>
 #include <kernel/paging.h>
 #include <kernel/heap.h>
+#include <kernel/dev/block_device.h>
+#include <kernel/dev/disk/ide.h>
+#include <kernel/shell.h>
 
 extern uint32_t _kernel_start;
 extern uint32_t _kernel_end;
@@ -116,37 +119,45 @@ void kernel_main(unsigned long magic, unsigned long addr)
 
   heap_init(heap_virtual_start, heap_size_bytes / PAGE_SIZE, kernel_page_directory);
 
+  result = ide_driver_init();
+  if (result != EOK)
+  {
+    PANIC_CODE(kprintf("failed to initialize ide driver. error: %s\n", string_error(result)));
+  }
+
+  result = ide_driver_scan_disks();
+  if (result != EOK)
+  {
+    PANIC_CODE(kprintf("failed to scan ide disks. error: %s\n", string_error(result)));
+  }
+
   result = driver_manager_init();
   if (result != EOK)
   {
     PANIC_CODE(kprintf("failed to initialize driver manager. error: %s\n", string_error(result)));
   }
 
-  uint32_t num_disks = get_num_disks();
-  if (num_disks < 1)
-  {
-    PANIC_PRINT("no disks identified");
-  }
+  block_device_t *disk = get_block_devices()[0];
 
-  disk_t **disks = get_disks();
+  const char *str = "Hello Disk World!";
+
+  block_request_t request;
+  request.bdev = disk;
+  request.lba = 12;
+  request.num_blocks = 1;
+  request.buffer = str;
+
+  submit_write_request(disk, &request);
+
+  char buf1[512];
+  request.buffer = buf1;
+  submit_read_request(disk, &request);
+
+  kprintf("disk read: \"%s\"\n", buf1);
 
   kprintf("\033[40m  \033[41m  \033[42m  \033[43m  \033[44m  \033[45m  \033[46m  \033[47m  \033[40;1m  \033[41;1m  \033[42;1m  \033[43;1m  \033[44;1m  \033[45;1m  \033[46;1m  \033[47;1m  \033[0m\n");
-  kprintf("\033[32mWelcome to LuhOS. This is a work in progress kernel shell. Have fun!\033[0m\n");
-  kprintf("<\033[31mluh32\033[0m@\033[34;1mkernel\033[0m>$ ");
 
-  while (true)
-  {
-    uint32_t key = driver_manager_get_key();
-    if (key != NULL_KEY)
-    {
-      uint8_t ascii_key = key_code_to_ascii(key);
-      if (ascii_key == 0)
-      {
-        continue;
-      }
-      kprintf("%c", ascii_key);
-    }
-  }
+  run_kernel_shell();
 
   while (true)
   {

@@ -7,14 +7,15 @@
 
 void kprintf(const char *message, ...);
 
-#define PANIC_PRINT(msg)                                                    \
-  kprintf("\033[41mkernel panic... the system can not continue:%s\n", msg); \
-  while (true)                                                              \
+#define PANIC_PRINT(msg)                                                      \
+  kprintf("\033[41mkernel panic... the system can not continue:\n%s\n", msg); \
+  while (true)                                                                \
     ;
 
 #define PANIC_CODE(code)                                             \
   kprintf("\033[41mkernel panic... the system can not continue:\n"); \
   code;                                                              \
+  kprintf("\n");                                                     \
   while (true)                                                       \
     ;
 

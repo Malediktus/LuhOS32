@@ -9,5 +9,6 @@ uint32_t ega_driver_deinit(driver_t *driver);
 uint32_t ega_driver_get_width(driver_t *driver);
 uint32_t ega_driver_get_height(driver_t *driver);
 uint32_t ega_driver_write_tty(driver_t *driver, uint32_t x, uint32_t y, uint8_t color, const char c);
+uint32_t ega_driver_scroll_line(driver_t *driver);
 
 #endif

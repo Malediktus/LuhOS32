@@ -7,14 +7,10 @@
 static driver_t drivers[MAX_DRIVERS];
 static uint8_t num_drivers;
 
-static disk_t *disks[MAX_DISKS];
-static uint8_t num_disks;
-
 uint32_t driver_manager_init_early(struct multiboot_tag_framebuffer *framebuffer)
 {
   uint32_t result = EOK;
   num_drivers = 0;
-  num_disks = 0;
 
   switch (framebuffer->common.framebuffer_type)
   {
@@ -38,17 +34,6 @@ out:
 uint32_t driver_manager_init()
 {
   uint32_t result = EOK;
-
-  uint8_t num_ide_disks;
-  result = ide_driver_init(&drivers[num_drivers], disks + num_disks, &num_ide_disks);
-  if (result != EOK)
-  {
-    goto out;
-  }
-
-  num_disks += num_ide_disks;
-  num_drivers++;
-
   result = keyboard_init(&drivers[num_drivers]);
   if (result != EOK)
   {
@@ -81,82 +66,6 @@ uint32_t driver_manager_deinit()
 
 out:
   return result;
-}
-
-uint32_t driver_manager_disk_write_sector(uint32_t disk_id, uint32_t lba, uint8_t *buf)
-{
-  disk_t *disk = NULL;
-  for (uint8_t i = 0; i < num_disks; i++)
-  {
-    if (disks[i]->id == disk_id)
-    {
-      disk = disks[i];
-    }
-  }
-
-  if (disk == NULL)
-  {
-    return -EINVARG;
-  }
-
-  for (uint8_t i = 0; i < num_drivers; i++)
-  {
-    if (drivers[i].type == disk->driver_type)
-    {
-      switch (disk->driver_type)
-      {
-      case DRIVER_TYPE_IDE:
-        return ide_driver_write_sector(disk, lba, buf);
-      default:
-        break;
-      }
-    }
-  }
-
-  return -EINVARG;
-}
-
-uint32_t driver_manager_disk_read_sector(uint32_t disk_id, uint32_t lba, uint8_t *buf)
-{
-  disk_t *disk = NULL;
-  for (uint8_t i = 0; i < num_disks; i++)
-  {
-    if (disks[i]->id == disk_id)
-    {
-      disk = disks[i];
-    }
-  }
-
-  if (disk == NULL)
-  {
-    return -EINVARG;
-  }
-
-  for (uint8_t i = 0; i < num_drivers; i++)
-  {
-    if (drivers[i].type == disk->driver_type)
-    {
-      switch (disk->driver_type)
-      {
-      case DRIVER_TYPE_IDE:
-        return ide_driver_read_sector(disk, lba, buf);
-      default:
-        break;
-      }
-    }
-  }
-
-  return -EINVARG;
-}
-
-uint32_t get_num_disks()
-{
-  return num_disks;
-}
-
-disk_t **get_disks()
-{
-  return disks;
 }
 
 uint32_t driver_manager_get_width()
@@ -203,6 +112,30 @@ uint32_t driver_manager_write_tty(uint32_t x, uint32_t y, uint8_t color, const c
     {
     case DRIVER_TYPE_EGA:
       result = ega_driver_write_tty(&drivers[i], x, y, color, c);
+      if (result != EOK)
+      {
+        goto out;
+      }
+      goto out;
+    default:
+      break;
+    }
+  }
+
+out:
+  return result;
+}
+
+uint32_t driver_manager_scroll_line()
+{
+  uint32_t result = EOK;
+
+  for (uint8_t i = 0; i < num_drivers; i++)
+  {
+    switch (drivers->type)
+    {
+    case DRIVER_TYPE_EGA:
+      result = ega_driver_scroll_line(&drivers[i]);
       if (result != EOK)
       {
         goto out;

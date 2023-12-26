@@ -137,24 +137,6 @@ void kernel_main(unsigned long magic, unsigned long addr)
     PANIC_CODE(kprintf("failed to initialize driver manager. error: %s\n", string_error(result)));
   }
 
-  block_device_t *disk = get_block_devices()[0];
-
-  const char *str = "Hello Disk World!";
-
-  block_request_t request;
-  request.bdev = disk;
-  request.lba = 12;
-  request.num_blocks = 1;
-  request.buffer = str;
-
-  submit_write_request(disk, &request);
-
-  char buf1[512];
-  request.buffer = buf1;
-  submit_read_request(disk, &request);
-
-  kprintf("disk read: \"%s\"\n", buf1);
-
   kprintf("\033[40m  \033[41m  \033[42m  \033[43m  \033[44m  \033[45m  \033[46m  \033[47m  \033[40;1m  \033[41;1m  \033[42;1m  \033[43;1m  \033[44;1m  \033[45;1m  \033[46;1m  \033[47;1m  \033[0m\n");
 
   run_kernel_shell();

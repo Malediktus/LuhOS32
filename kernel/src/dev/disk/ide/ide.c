@@ -245,7 +245,7 @@ uint32_t ide_driver_scan_disks()
 uint32_t ide_write_block(block_device_t *bdev, uint32_t lba, uint8_t *buf)
 {
   ide_device_private_data_t *private_data = bdev->implementation.private_data;
-  bool master = private_data->flags & IDE_DEVICE_FLAG_MASTER;
+  bool master = !(private_data->flags & IDE_DEVICE_FLAG_MASTER);
   uint16_t bus = private_data->bus;
 
   port_byte_out(bus + ATA_REG_CONTROL, 0x02);
@@ -278,7 +278,7 @@ uint32_t ide_write_block(block_device_t *bdev, uint32_t lba, uint8_t *buf)
 uint32_t ide_read_block(block_device_t *bdev, uint32_t lba, uint8_t *buf)
 {
   ide_device_private_data_t *private_data = bdev->implementation.private_data;
-  bool master = private_data->flags & IDE_DEVICE_FLAG_MASTER;
+  bool master = !(private_data->flags & IDE_DEVICE_FLAG_MASTER);
   uint16_t bus = private_data->bus;
 
   port_byte_out(bus + ATA_REG_CONTROL, 0x02);

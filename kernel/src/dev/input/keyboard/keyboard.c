@@ -7,7 +7,7 @@
 uint8_t *keycache = 0;
 uint16_t key_loc = 0;
 
-void keyboard_irq(registers_t regs)
+void keyboard_irq(registers_t)
 {
     if (key_loc >= 255)
     {
@@ -49,4 +49,6 @@ out:
 
 uint32_t keyboard_get_key_modifiers()
 {
+    // TODO: Implement
+    return 0;
 }

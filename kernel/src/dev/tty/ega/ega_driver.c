@@ -38,24 +38,19 @@ uint32_t ega_driver_write_tty(driver_t *driver, uint32_t x, uint32_t y, uint8_t 
   return EOK;
 }
 
-uint32_t ega_driver_scroll_line(driver_t *driver)
+uint32_t ega_driver_scroll_line(driver_t *)
 {
-  // Calculate the address of the start and end of the screen buffer
-  uint16_t *screen_buffer = (uint16_t *)0xB8000; // Address of text mode video buffer
+  uint16_t *screen_buffer = (uint16_t *)0xB8000;
 
-  // Move each line up by copying the content of the line below it
-  for (int i = 0; i < driver_manager_get_height() - 1; ++i)
+  for (uint32_t i = 0; i < driver_manager_get_height() - 1; ++i)
   {
-    // Calculate the start of the current and next lines
     uint16_t *current_line_start = screen_buffer + (i * 80);
     uint16_t *next_line_start = screen_buffer + ((i + 1) * 80);
 
-    // Copy the content of the next line to the current line
     memcpy(current_line_start, next_line_start, 80 * sizeof(uint16_t));
   }
 
-  // Clear the last line by filling it with empty spaces
-  uint16_t empty_space = 0x0700; // Assuming 0x0700 represents a space in your color scheme
+  uint16_t empty_space = 0x0700;
   for (int i = 0; i < 80; ++i)
   {
     screen_buffer[((driver_manager_get_height() - 1) * 80) + i] = empty_space;

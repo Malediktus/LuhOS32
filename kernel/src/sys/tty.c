@@ -186,6 +186,29 @@ void kprint_at_color(const char *message, uint32_t _col, uint32_t _row, uint8_t 
       scroll_screen();
       continue;
     }
+    else if (message[i] == '\b')
+    {
+      if (col > 0)
+      {
+        col--;
+      }
+      else
+      {
+        row--;
+        col = driver_manager_get_width() - 1;
+      }
+
+      uint32_t result = driver_manager_write_tty(col, row, current_color, ' ');
+      if (result != EOK)
+      {
+        while (true)
+        {
+          // Can't print panic message, because printing faults
+          asm("cli");
+          asm("hlt");
+        }
+      }
+    }
 
     kput_char(message[i]);
   }
@@ -280,6 +303,29 @@ void kprint_at(const char *message, uint32_t _col, uint32_t _row)
       row++;
       scroll_screen();
       continue;
+    }
+    else if (message[i] == '\b')
+    {
+      if (col > 0)
+      {
+        col--;
+      }
+      else
+      {
+        row--;
+        col = driver_manager_get_width() - 1;
+      }
+
+      uint32_t result = driver_manager_write_tty(col, row, current_color, ' ');
+      if (result != EOK)
+      {
+        while (true)
+        {
+          // Can't print panic message, because printing faults
+          asm("cli");
+          asm("hlt");
+        }
+      }
     }
 
     kput_char(message[i]);
@@ -379,6 +425,30 @@ void kprintf(const char *fmt, ...)
         fmt++;
         scroll_screen();
       }
+      else if (*fmt == '\b')
+      {
+        fmt++;
+        if (col > 0)
+        {
+          col--;
+        }
+        else
+        {
+          row--;
+          col = driver_manager_get_width() - 1;
+        }
+
+        uint32_t result = driver_manager_write_tty(col, row, current_color, ' ');
+        if (result != EOK)
+        {
+          while (true)
+          {
+            // Can't print panic message, because printing faults
+            asm("cli");
+            asm("hlt");
+          }
+        }
+      }
       else
       {
         kput_char(*fmt++);
@@ -417,6 +487,29 @@ void kprintf(const char *fmt, ...)
           col = 0;
           row++;
           scroll_screen();
+        }
+        else if (c == '\b')
+        {
+          if (col > 0)
+          {
+            col--;
+          }
+          else
+          {
+            row--;
+            col = driver_manager_get_width() - 1;
+          }
+
+          uint32_t result = driver_manager_write_tty(col, row, current_color, ' ');
+          if (result != EOK)
+          {
+            while (true)
+            {
+              // Can't print panic message, because printing faults
+              asm("cli");
+              asm("hlt");
+            }
+          }
         }
         else
         {

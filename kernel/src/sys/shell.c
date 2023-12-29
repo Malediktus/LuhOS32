@@ -138,26 +138,39 @@ void run_kernel_shell()
     while (true)
     {
         uint32_t key = driver_manager_get_key();
-        if (key != NULL_KEY)
+        if (key == NULL_KEY)
         {
-            uint8_t ascii_key = key_code_to_ascii(key);
-            if (ascii_key == 0 || line_len >= 256)
-            {
-                continue;
-            }
-
-            if (ascii_key == '\n')
-            {
-                kprintf("\n");
-                process_command(line, line_len);
-                kprintf("<\033[31mluh32\033[0m@\033[34;1mkernel\033[0m>$ ");
-                line_len = 0;
-                memset(line, 0, 256);
-                continue;
-            }
-
-            kprintf("%c", ascii_key);
-            line[line_len++] = ascii_key;
+            continue;
         }
+
+        uint8_t ascii_key = key_code_to_ascii(key);
+        if (ascii_key == 0 || line_len >= 256)
+        {
+            continue;
+        }
+
+        if (ascii_key == '\n')
+        {
+            kprintf("\n");
+            process_command(line, line_len);
+            kprintf("<\033[31mluh32\033[0m@\033[34;1mkernel\033[0m>$ ");
+            line_len = 0;
+            memset(line, 0, 256);
+            continue;
+        }
+        else if (ascii_key == '\b')
+        {
+            if (line_len == 0)
+            {
+                continue;
+            }
+            line[line_len] = '\0';
+            line_len--;
+            kprintf("\b");
+            continue;
+        }
+
+        kprintf("%c", ascii_key);
+        line[line_len++] = ascii_key;
     }
 }

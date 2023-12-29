@@ -31,9 +31,9 @@ SECTIONS
     _kernel_end = .;
 
     /DISCARD/ : {
-		*(.eh_frame)
+        *(.eh_frame)
         *(.eh_frame)
         *(.note .note.*)
-		*(.note.gnu.build-id)
+        *(.note.gnu.build-id)
     }
 }

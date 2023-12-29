@@ -11,7 +11,7 @@
 _start:
     jmp multiboot_entry
 
-    .section .multiboot
+    .section .multiboot, "a", @progbits
     .align 8
 multiboot_header:
     .long MULTIBOOT2_HEADER_MAGIC

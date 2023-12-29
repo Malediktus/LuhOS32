@@ -3,6 +3,9 @@
 static block_device_t *block_devices[MAX_BLOCK_DEVICES];
 static uint32_t num_block_devices = 0;
 
+static logical_block_device_t *logical_block_devices[MAX_LOGICAL_BLOCK_DEVICES];
+static uint32_t num_logical_block_devices = 0;
+
 void register_block_device(block_device_t *bdev)
 {
     bdev->device_id = num_block_devices; // TODO: use uuids from parition/filsystem metadata
@@ -50,4 +53,25 @@ block_device_t **get_block_devices()
 uint32_t get_num_block_devices()
 {
     return num_block_devices;
+}
+
+void register_logical_block_device(logical_block_device_t *lbdev)
+{
+    lbdev->device_id = num_block_devices; // TODO: use uuids from parition/filsystem metadata
+    lbdev->device_name[0] = 's';
+    lbdev->device_name[1] = 'd';
+    lbdev->device_name[2] = lbdev->parent->device_name[2];
+    lbdev->device_name[3] = '1' + lbdev->local_id;
+    lbdev->device_name[4] = '\0';
+    logical_block_devices[num_logical_block_devices++] = lbdev;
+}
+
+logical_block_device_t **get_logical_block_devices()
+{
+    return logical_block_devices;
+}
+
+uint32_t get_num_logical_block_devices()
+{
+    return num_logical_block_devices;
 }

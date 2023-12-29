@@ -4,7 +4,8 @@
 #include <kernel/types.h>
 #include <kernel/dev/driver_manager.h>
 
-#define MAX_BLOCK_DEVICES 50
+#define MAX_BLOCK_DEVICES 10
+#define MAX_LOGICAL_BLOCK_DEVICES 50
 
 struct block_device;
 
@@ -39,5 +40,25 @@ void submit_write_request(block_device_t *bdev, block_request_t *request);
 
 block_device_t **get_block_devices();
 uint32_t get_num_block_devices();
+
+#define LOGICAL_BLOCK_DEVICE_FLAGS_BOOTABLE 1 << 0
+
+typedef struct
+{
+    uint32_t device_id;
+    char device_name[32];
+    block_device_t *parent;
+
+    uint8_t flags;
+    uint32_t lba_offset;
+    uint32_t num_blocks;
+    uint8_t type;
+    uint8_t local_id;
+} logical_block_device_t;
+
+void register_logical_block_device(logical_block_device_t *lbdev);
+
+logical_block_device_t **get_logical_block_devices();
+uint32_t get_num_logical_block_devices();
 
 #endif

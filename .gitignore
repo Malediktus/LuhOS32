@@ -9,5 +9,6 @@ kernel/build/
 
 # Compile and runtime files
 luhos.iso
+luhos.img
 *.elf
 *.note

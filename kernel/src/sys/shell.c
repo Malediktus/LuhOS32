@@ -110,6 +110,16 @@ void process_command(char *line, uint32_t len)
             const block_device_t *block_device = block_devices[i];
             kprintf("\t%s: id %d, block size %d, num blocks %d\n", block_device->device_name, block_device->device_id, block_device->block_size, block_device->total_blocks);
         }
+
+        kprintf("scanned parititons:\n");
+
+        logical_block_device_t **logical_block_devices = get_logical_block_devices();
+        for (uint32_t i = 0; i < get_num_logical_block_devices(); i++)
+        {
+            const logical_block_device_t *logical_block_device = logical_block_devices[i];
+            uint32_t type = (uint32_t)logical_block_device->type;
+            kprintf("\t%s: id %d, offset %d, num blocks %d, type %d\n", logical_block_device->device_name, logical_block_device->device_id, logical_block_device->lba_offset, logical_block_device->num_blocks, type);
+        }
     }
     else if (strcmp(command_info.command, "echo") == 0)
     {

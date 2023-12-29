@@ -14,6 +14,7 @@
 #include <kernel/dev/block_device.h>
 #include <kernel/dev/disk/ide.h>
 #include <kernel/shell.h>
+#include <kernel/fs/mbr.h>
 
 extern uint32_t _kernel_start;
 extern uint32_t _kernel_end;
@@ -129,6 +130,12 @@ void kernel_main(unsigned long magic, unsigned long addr)
     if (result != EOK)
     {
         PANIC_CODE(kprintf("failed to scan ide disks. error: %s\n", string_error(result)));
+    }
+
+    result = scan_logical_block_devices_mbr();
+    if (result != EOK)
+    {
+        PANIC_CODE(kprintf("failed to scan mbrs. error: %s\n", string_error(result)));
     }
 
     result = driver_manager_init();

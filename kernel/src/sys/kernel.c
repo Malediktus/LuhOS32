@@ -21,6 +21,41 @@ extern uint32_t _kernel_end;
 
 static uint32_t *kernel_page_directory = 0;
 
+struct fat32_boot_info
+{
+    uint32_t sectors_per_fat;
+    uint16_t fat_flags;
+    uint16_t version;
+    uint32_t root_cluster;
+    uint16_t fsinfo_sector;
+    uint16_t backup_sector;
+    uint8_t reserved1[12];
+    uint8_t driver_number;
+    uint8_t ext_sig;
+    uint32_t serial;
+    char label[11];
+    char type[8];
+} __attribute__((packed));
+
+struct fat32_boot_sectors
+{
+    uint8_t jmp_boot[3];
+    char oemname[8];
+    uint16_t bytes_per_sector;
+    uint8_t sectors_per_cluster;
+    uint16_t reserved_sectors;
+    uint8_t fat_count;
+    uint16_t root_max_entries;
+    uint16_t total_sectors_small;
+    uint8_t media_info;
+    uint16_t sectors_per_fat_small;
+    uint16_t sectors_per_track;
+    uint16_t head_count;
+    uint32_t fs_offset;
+    uint32_t total_sectors;
+    struct fat32_boot_info fat32;
+} __attribute__((packed));
+
 void kernel_main(unsigned long magic, unsigned long addr)
 {
     disable_interrupts();

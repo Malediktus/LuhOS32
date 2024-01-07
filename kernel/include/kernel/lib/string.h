@@ -19,5 +19,6 @@ char *strndup(char *src, uint32_t size);
 char *strcat(char *dest, const char *src);
 char *strpbrk(char *s1, const char *s2);
 char *strtok(char *s, const char *delim);
+char *strcpy(char *dest, const char *src);
 
 #endif

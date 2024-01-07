@@ -6,9 +6,11 @@ sysroot/
 logs/
 kernel/bin/
 kernel/build/
+tools/initrd_gen/initrd_gen
 
 # Compile and runtime files
 luhos.iso
 luhos.img
 *.elf
 *.note
+*.img

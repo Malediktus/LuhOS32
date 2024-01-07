@@ -1,4 +1,6 @@
 #include <kernel/fs/fat32.h>
+#include <kernel/lib/string.h>
+#include <kernel/heap.h>
 
 struct fat32_boot_info
 {
@@ -114,4 +116,20 @@ struct dirent *fat32_readdir(fs_node_t *node, uint32_t index, logical_block_devi
 
 fs_node_t *fat32_finddir(fs_node_t *node, char *name, logical_block_device_t *lbdev, void *private_data)
 {
+}
+
+fs_node_t *initialise_fat32()
+{
+    fs_node_t *root_node = kmalloc(sizeof(fs_node_t));
+    memset(root_node, 0x00, sizeof(fs_node_t));
+    strcpy(root_node->name, "/");
+    root_node->flags = FS_DIRECTORY;
+    root_node->readdir = &fat32_readdir;
+    root_node->finddir = &fat32_finddir;
+
+    struct fat32_private_data *private_data = kmalloc(sizeof(struct fat32_private_data));
+
+    root_node->mountfs_private_data = private_data;
+
+    return root_node;
 }

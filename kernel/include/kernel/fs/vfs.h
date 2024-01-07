@@ -17,6 +17,8 @@
 #define OPEN_MODE_APPEND 1 << 2
 #define OPEN_MODE_BINARY 1 << 3
 
+struct fs_node;
+
 typedef uint32_t (*read_type_t)(struct fs_node *, uint32_t, uint32_t, uint8_t *, logical_block_device_t *, void *);
 typedef uint32_t (*write_type_t)(struct fs_node *, uint32_t, uint32_t, uint8_t *, logical_block_device_t *, void *);
 typedef void (*open_type_t)(struct fs_node *, uint8_t, logical_block_device_t *, void *);

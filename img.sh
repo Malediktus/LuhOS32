@@ -14,6 +14,7 @@ set default=0
 
 menuentry "LuhOS 32Bit" {
     multiboot2 /boot/kernel.elf
+    module2 /boot/luhos.initrd
     boot
 }
 EOF

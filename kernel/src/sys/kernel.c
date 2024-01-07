@@ -15,46 +15,13 @@
 #include <kernel/dev/disk/ide.h>
 #include <kernel/shell.h>
 #include <kernel/fs/mbr.h>
+#include <kernel/fs/vfs.h>
+#include <kernel/fs/initrd.h>
 
 extern uint32_t _kernel_start;
 extern uint32_t _kernel_end;
 
 static uint32_t *kernel_page_directory = 0;
-
-struct fat32_boot_info
-{
-    uint32_t sectors_per_fat;
-    uint16_t fat_flags;
-    uint16_t version;
-    uint32_t root_cluster;
-    uint16_t fsinfo_sector;
-    uint16_t backup_sector;
-    uint8_t reserved1[12];
-    uint8_t driver_number;
-    uint8_t ext_sig;
-    uint32_t serial;
-    char label[11];
-    char type[8];
-} __attribute__((packed));
-
-struct fat32_boot_sectors
-{
-    uint8_t jmp_boot[3];
-    char oemname[8];
-    uint16_t bytes_per_sector;
-    uint8_t sectors_per_cluster;
-    uint16_t reserved_sectors;
-    uint8_t fat_count;
-    uint16_t root_max_entries;
-    uint16_t total_sectors_small;
-    uint8_t media_info;
-    uint16_t sectors_per_fat_small;
-    uint16_t sectors_per_track;
-    uint16_t head_count;
-    uint32_t fs_offset;
-    uint32_t total_sectors;
-    struct fat32_boot_info fat32;
-} __attribute__((packed));
 
 void kernel_main(unsigned long magic, unsigned long addr)
 {
@@ -64,6 +31,7 @@ void kernel_main(unsigned long magic, unsigned long addr)
     struct multiboot_tag_mmap *mmap = NULL;
     uint32_t mmap_size = 0;
     char *bootloader_name;
+    uint32_t initrd_start;
 
     if (magic != MULTIBOOT2_BOOTLOADER_MAGIC)
     {
@@ -97,6 +65,12 @@ void kernel_main(unsigned long magic, unsigned long addr)
         {
             mmap = (struct multiboot_tag_mmap *)tag;
             mmap_size = tag->size;
+            break;
+        }
+
+        case MULTIBOOT_TAG_TYPE_MODULE:
+        {
+            initrd_start = ((struct multiboot_tag_module *)tag)->mod_start;
             break;
         }
         }
@@ -177,6 +151,33 @@ void kernel_main(unsigned long magic, unsigned long addr)
     if (result != EOK)
     {
         PANIC_CODE(kprintf("failed to initialize driver manager. error: %s\n", string_error(result)));
+    }
+
+    if (initrd_start == 0x00)
+    {
+        PANIC_PRINT("initrd module not loaded");
+    }
+
+    fs_root = initialise_initrd(initrd_start);
+
+    kprintf("scanning initrd:\n");
+
+    int i = 0;
+    struct dirent *node = 0;
+    while ((node = readdir_fs(fs_root, i)) != 0)
+    {
+        kprintf("\tfound file: %s\n", node->name);
+        fs_node_t *fsnode = finddir_fs(fs_root, node->name);
+
+        if ((fsnode->flags & 0x7) == FS_DIRECTORY)
+            kprintf("\t\t(directory)\n");
+        else
+        {
+            char buf[256];
+            read_fs(fsnode, 0, 256, (uint8_t *)buf);
+            kprintf("\t\t%s\n", buf);
+        }
+        i++;
     }
 
     kprintf("\033[40m  \033[41m  \033[42m  \033[43m  \033[44m  \033[45m  \033[46m  \033[47m  \033[40;1m  \033[41;1m  \033[42;1m  \033[43;1m  \033[44;1m  \033[45;1m  \033[46;1m  \033[47;1m  \033[0m\n");

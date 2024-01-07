@@ -278,3 +278,11 @@ char *strtok(char *s, const char *delim)
   }
   return token;
 }
+
+char *strcpy(char *dest, const char *src)
+{
+  char *temp = dest;
+  while (*dest++ = *src++)
+    ;
+  return temp;
+}

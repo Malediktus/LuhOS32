@@ -17,6 +17,7 @@
 #include <kernel/fs/mbr.h>
 #include <kernel/fs/vfs.h>
 #include <kernel/fs/initrd.h>
+#include <kernel/fs/fat32.h>
 
 extern uint32_t _kernel_start;
 extern uint32_t _kernel_end;
@@ -158,7 +159,8 @@ void kernel_main(unsigned long magic, unsigned long addr)
         PANIC_PRINT("initrd module not loaded");
     }
 
-    fs_root = initialise_initrd(initrd_start);
+    // TODO: fix initrd
+    /*fs_root = initialise_initrd(initrd_start);
 
     kprintf("scanning initrd:\n");
 
@@ -178,7 +180,16 @@ void kernel_main(unsigned long magic, unsigned long addr)
             kprintf("\t\t%s\n", buf);
         }
         i++;
+    }*/
+
+    logical_block_device_t **lbdevs = get_logical_block_devices();
+    if (get_num_logical_block_devices() < 1)
+    {
+        PANIC_PRINT("no logical block device found");
     }
+
+    free_initrd();
+    fs_root = initialise_fat32(lbdevs[0]);
 
     kprintf("\033[40m  \033[41m  \033[42m  \033[43m  \033[44m  \033[45m  \033[46m  \033[47m  \033[40;1m  \033[41;1m  \033[42;1m  \033[43;1m  \033[44;1m  \033[45;1m  \033[46;1m  \033[47;1m  \033[0m\n");
 

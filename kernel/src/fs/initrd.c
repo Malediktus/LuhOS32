@@ -101,6 +101,9 @@ fs_node_t *initialise_initrd(uint32_t location)
     initrd_dev->ptr = 0;
     initrd_dev->impl = 0;
 
+    // TODO: fix. Under some unrelated conditions which I couldn't identify yet this allocates a way to large number of bytes which crashes the kernel
+    PANIC_PRINT("this code should not be run because it's faulty at the moment");
+
     root_nodes = (fs_node_t *)kmalloc(sizeof(fs_node_t) * initrd_header->nfiles);
     nroot_nodes = initrd_header->nfiles;
 
@@ -127,4 +130,11 @@ fs_node_t *initialise_initrd(uint32_t location)
     }
 
     return initrd_root;
+}
+
+void free_initrd()
+{
+    kfree(initrd_root);
+    kfree(initrd_dev);
+    kfree(root_nodes);
 }

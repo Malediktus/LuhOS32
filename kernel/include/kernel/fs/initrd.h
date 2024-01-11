@@ -5,5 +5,6 @@
 #include <kernel/fs/vfs.h>
 
 fs_node_t *initialise_initrd(uint32_t location);
+void free_initrd();
 
 #endif

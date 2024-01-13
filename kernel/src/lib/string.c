@@ -98,6 +98,20 @@ int strcmp(const char *s1, const char *s2)
   return *(const uint8_t *)s1 - *(const uint8_t *)s2;
 }
 
+int strncmp(const char *s1, const char *s2, uint32_t n)
+{
+  if (n == 0)
+    return (0);
+  do
+  {
+    if (*s1 != *s2++)
+      return (*(unsigned char *)s1 - *(unsigned char *)--s2);
+    if (*s1++ == 0)
+      break;
+  } while (--n != 0);
+  return (0);
+}
+
 char *strchr(const char *s, int c)
 {
   do
@@ -168,7 +182,7 @@ uint32_t strlen(const char *str)
   return len;
 }
 
-char *strdup(char *src)
+char *strdup(const char *src)
 {
   int src_size;
   static char *dup;
@@ -285,4 +299,14 @@ char *strcpy(char *dest, const char *src)
   while (*dest++ = *src++)
     ;
   return temp;
+}
+
+char *strtoupper(char *str)
+{
+  for (char *p = str; *p != '\0'; p++)
+  {
+    if (*p >= 'a' && *p <= 'z')
+      *p -= 32;
+  }
+  return str;
 }

@@ -54,7 +54,7 @@ uint8_t key_code_to_ascii(uint32_t key)
     if (key == SLASH_RELEASED)
         return '/';
     if (key == ZERO_PRESSED)
-        return '0';
+        return '/';
     if (key >= ONE_PRESSED && key <= NINE_PRESSED)
         return _num[key - ONE_PRESSED];
     if (key >= 0x10 && key <= 0x1C)

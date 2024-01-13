@@ -21,14 +21,14 @@ struct fs_node;
 
 typedef uint32_t (*read_type_t)(struct fs_node *, uint32_t, uint32_t, uint8_t *, logical_block_device_t *, void *);
 typedef uint32_t (*write_type_t)(struct fs_node *, uint32_t, uint32_t, uint8_t *, logical_block_device_t *, void *);
-typedef void (*open_type_t)(struct fs_node *, uint8_t, logical_block_device_t *, void *);
+typedef struct fs_node *(*open_type_t)(const char *, logical_block_device_t *, void *);
 typedef void (*close_type_t)(struct fs_node *, logical_block_device_t *, void *);
 typedef struct dirent *(*readdir_type_t)(struct fs_node *, uint32_t, logical_block_device_t *, void *);
 typedef struct fs_node *(*finddir_type_t)(struct fs_node *, char *name, logical_block_device_t *, void *);
 
 typedef struct fs_node
 {
-    char name[128];
+    char path[128];
     uint32_t mask;
     uint32_t uid;
     uint32_t gid;
@@ -57,7 +57,7 @@ extern fs_node_t *fs_root;
 
 uint32_t read_fs(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer);
 uint32_t write_fs(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer);
-void open_fs(fs_node_t *node, uint8_t mode);
+fs_node_t *open_fs(const char *path);
 void close_fs(fs_node_t *node);
 struct dirent *readdir_fs(fs_node_t *node, uint32_t index);
 fs_node_t *finddir_fs(fs_node_t *node, char *name);

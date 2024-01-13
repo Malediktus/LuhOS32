@@ -159,10 +159,17 @@ void kernel_main(unsigned long magic, unsigned long addr)
         PANIC_PRINT("initrd module not loaded");
     }
 
-    // TODO: fix initrd
-    /*fs_root = initialise_initrd(initrd_start);
+    // TODO: select device from fstab in initrd
+    logical_block_device_t **lbdevs = get_logical_block_devices();
+    if (get_num_logical_block_devices() < 1)
+    {
+        PANIC_PRINT("no logical block device found");
+    }
 
-    kprintf("scanning initrd:\n");
+    // TODO: fix initrd
+    fs_root = initialise_fat32(lbdevs[0]);
+
+    /*kprintf("scanning fat32:\n");
 
     int i = 0;
     struct dirent *node = 0;
@@ -172,27 +179,38 @@ void kernel_main(unsigned long magic, unsigned long addr)
         fs_node_t *fsnode = finddir_fs(fs_root, node->name);
 
         if ((fsnode->flags & 0x7) == FS_DIRECTORY)
-            kprintf("\t\t(directory)\n");
-        else
         {
-            char buf[256];
-            read_fs(fsnode, 0, 256, (uint8_t *)buf);
-            kprintf("\t\t%s\n", buf);
-        }
+            kprintf("\t\t(directory)\n");
+            int j = 0;
+            struct dirent *new_node = 0;
+            while ((new_node = readdir_fs(fsnode, j)) != 0)
+            {
+                if (new_node->name[0] == '.')
+                {
+                    j++;
+                    continue;
+                }
+                kprintf("\t\tfound file: %s\n", new_node->name);
+                fs_node_t *new_fsnode = finddir_fs(fsnode, new_node->name);
+
+                if ((new_fsnode->flags & 0x7) == FS_DIRECTORY)
+                {
+                    kprintf("\t\t\t(directory)\n");
+                }
+                j++;
+            }
+        } // else
+        //{
+        //     char buf[256];
+        //     read_fs(fsnode, 0, 256, (uint8_t *)buf);
+        //     kprintf("\t\t%s\n", buf);
+        // }
         i++;
     }*/
 
-    logical_block_device_t **lbdevs = get_logical_block_devices();
-    if (get_num_logical_block_devices() < 1)
-    {
-        PANIC_PRINT("no logical block device found");
-    }
-
-    free_initrd();
-    fs_root = initialise_fat32(lbdevs[0]);
-
     kprintf("\033[40m  \033[41m  \033[42m  \033[43m  \033[44m  \033[45m  \033[46m  \033[47m  \033[40;1m  \033[41;1m  \033[42;1m  \033[43;1m  \033[44;1m  \033[45;1m  \033[46;1m  \033[47;1m  \033[0m\n");
 
+    // TODO: I think there are many memory leaks all across the code
     run_kernel_shell();
 
     while (true)

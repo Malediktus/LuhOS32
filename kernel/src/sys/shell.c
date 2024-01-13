@@ -5,6 +5,7 @@
 #include <kernel/page_allocator.h>
 #include <kernel/lib/string.h>
 #include <kernel/lib/ascii.h>
+#include <kernel/fs/vfs.h>
 
 struct command_info
 {
@@ -39,21 +40,7 @@ struct command_info parse_command(char *line, uint32_t len)
     uint32_t arg_index = 0;
     while (token != NULL)
     {
-        if (token[0] == '"')
-        {
-            result.arguments[arg_index++] = strdup(token + 1);
-            token = strtok(NULL, "\"");
-            if (token != NULL)
-            {
-                result.arguments[arg_index - 1] = krealloc(result.arguments[arg_index - 1], strlen(result.arguments[arg_index - 1]) + strlen(token) + 1);
-                strcat(result.arguments[arg_index - 1], " ");
-                strcat(result.arguments[arg_index - 1], token);
-            }
-        }
-        else
-        {
-            result.arguments[arg_index++] = strdup(token);
-        }
+        result.arguments[arg_index++] = strdup(token);
 
         if (arg_index >= max_arguments)
         {
@@ -90,11 +77,53 @@ void process_command(char *line, uint32_t len)
 
     if (strcmp(command_info.command, "help") == 0)
     {
-        kprintf("list of commands:\n - help: prints this message\n - sysinfo: gives you info about the kernel version\n - page: dynamicly allocates a page and prints it\n - dumpdisks: prints information about scanned block devices\n - echo: echoes arguments\n");
+        kprintf("list of commands:\n - help: prints this message\n - sysinfo: gives you info about the kernel version\n - ls: list files in directory\n - page: dynamicly allocates a page and prints it\n - dumpdisks: prints information about scanned block devices\n - echo: echoes arguments\n");
     }
     else if (strcmp(command_info.command, "sysinfo") == 0)
     {
         kprintf("LuhOS 32Bit - i386\nkernel version 0.1\ncopyright Nico Grundei 2023\n");
+    }
+    else if (strcmp(command_info.command, "ls") == 0)
+    {
+        const char *path = command_info.arguments[1];
+        fs_node_t *path_node = open_fs(path);
+        if (!path_node)
+        {
+            kprintf("error: file or directory does not exist\n");
+            free_command_info(&command_info);
+            return;
+        }
+
+        kprintf("listing contents of directory '%s'\n", path);
+        int i = 0;
+        int limit = 0;
+        struct dirent *node = 0;
+        while ((node = readdir_fs(path_node, i)) != 0)
+        {
+            if (strcmp(node->name, ".") == 0 || strcmp(node->name, "..") == 0)
+            {
+                limit++;
+                i++;
+                continue;
+            }
+            if (i > limit)
+            {
+                kprintf(", ");
+            }
+            kprintf("%s", node->name);
+
+            fs_node_t *fsnode = finddir_fs(path_node, node->name);
+
+            if ((fsnode->flags & 0x7) == FS_DIRECTORY)
+            {
+                kprintf(" (d)");
+            }
+            i++;
+        }
+
+        kprintf("\n");
+
+        close_fs(path_node);
     }
     else if (strcmp(command_info.command, "page") == 0)
     {

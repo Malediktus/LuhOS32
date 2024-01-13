@@ -18,20 +18,20 @@ uint32_t write_fs(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buff
         return 0;
 }
 
-void open_fs(fs_node_t *node, uint8_t mode)
+fs_node_t *open_fs(const char *path)
 {
-    if (node->open != 0)
-        return node->open(node, mode, node->lbdev, node->mountfs_private_data);
+    if (fs_root->open != 0) // TODO: use mountpoints
+        return fs_root->open(path, fs_root->lbdev, fs_root->mountfs_private_data);
     else
-        return 0;
+        return NULL;
 }
 
 void close_fs(fs_node_t *node)
 {
     if (node->close != 0)
         return node->close(node, node->lbdev, node->mountfs_private_data);
-    else
-        return 0;
+
+    PANIC_PRINT("close_fs failed because node->close is NULL");
 }
 
 struct dirent *readdir_fs(fs_node_t *node, uint32_t index)

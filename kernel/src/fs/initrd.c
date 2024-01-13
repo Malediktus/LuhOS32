@@ -51,8 +51,8 @@ static struct dirent *initrd_readdir(fs_node_t *node, uint32_t index, logical_bl
     if (index - 1 >= nroot_nodes)
         return 0;
 
-    strcpy(dirent.name, root_nodes[index - 1].name);
-    dirent.name[strlen(root_nodes[index - 1].name)] = 0;
+    strcpy(dirent.name, root_nodes[index - 1].path);
+    dirent.name[strlen(root_nodes[index - 1].path)] = 0;
     dirent.ino = root_nodes[index - 1].inode;
     return &dirent;
 }
@@ -65,7 +65,7 @@ static fs_node_t *initrd_finddir(fs_node_t *node, char *name, logical_block_devi
 
     int i;
     for (i = 0; i < nroot_nodes; i++)
-        if (!strcmp(name, root_nodes[i].name))
+        if (!strcmp(name, root_nodes[i].path))
             return &root_nodes[i];
     return 0;
 }
@@ -75,7 +75,7 @@ fs_node_t *initialise_initrd(uint32_t location)
     initrd_header = (initrd_header_t *)location;
     file_headers = (initrd_file_header_t *)(location + sizeof(initrd_header_t));
     initrd_root = (fs_node_t *)kmalloc(sizeof(fs_node_t));
-    strcpy(initrd_root->name, "initrd");
+    strcpy(initrd_root->path, "initrd");
     initrd_root->mask = initrd_root->uid = initrd_root->gid = initrd_root->inode = initrd_root->length = 0;
     initrd_root->flags = FS_DIRECTORY;
     initrd_root->read = 0;
@@ -89,7 +89,7 @@ fs_node_t *initialise_initrd(uint32_t location)
 
     // Initialise the /dev directory (required!)
     initrd_dev = (fs_node_t *)kmalloc(sizeof(fs_node_t));
-    strcpy(initrd_dev->name, "dev");
+    strcpy(initrd_dev->path, "dev");
     initrd_dev->mask = initrd_dev->uid = initrd_dev->gid = initrd_dev->inode = initrd_dev->length = 0;
     initrd_dev->flags = FS_DIRECTORY;
     initrd_dev->read = 0;
@@ -115,7 +115,7 @@ fs_node_t *initialise_initrd(uint32_t location)
         // of memory.
         file_headers[i].offset += location;
         // Create a new file node.
-        strcpy(root_nodes[i].name, &file_headers[i].name);
+        strcpy(root_nodes[i].path, &file_headers[i].name);
         root_nodes[i].mask = root_nodes[i].uid = root_nodes[i].gid = 0;
         root_nodes[i].length = file_headers[i].length;
         root_nodes[i].inode = i;

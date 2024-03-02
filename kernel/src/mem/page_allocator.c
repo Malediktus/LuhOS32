@@ -159,22 +159,3 @@ void page_reserve(void *ptr)
   bit_set(page_allocator.bitmap, index);
   page_allocator.last_index = index;
 }
-
-void *get_largest_memory_hole(struct multiboot_tag_mmap *mmap, uint32_t mmap_size, uint32_t *size)
-{
-  void *largest_reserved_segment = NULL;
-  *size = 0;
-
-  for (struct multiboot_mmap_entry *entry = mmap->entries;
-       (multiboot_uint8_t *)entry < (multiboot_uint8_t *)mmap + mmap_size;
-       entry = (multiboot_memory_map_t *)((unsigned long)entry + mmap->entry_size))
-  {
-    if (entry->type == MULTIBOOT_MEMORY_RESERVED && entry->len > *size)
-    {
-      largest_reserved_segment = (void *)entry->addr;
-      *size = entry->len;
-    }
-  }
-
-  return largest_reserved_segment;
-}

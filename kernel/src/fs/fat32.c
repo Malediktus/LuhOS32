@@ -1,13 +1,13 @@
 #include <kernel/fs/fat32.h>
 #include <kernel/lib/string.h>
 #include <kernel/heap.h>
+#include <kernel/dev/block_device.h>
 
 // TODO:
-// - multiple clusters in directories
+// - read files
 // - long filename support
 // - fix memory leaks
-// - use const char * instead of char * and ensure that their are not modified
-// - after that remove unnecessary strdups
+// - writing support
 
 struct fat32_boot_info
 {
@@ -194,113 +194,192 @@ static uint32_t cluster_to_lba(uint32_t cluster, logical_block_device_t *lbdev, 
 
 static struct fat32_direntry *find_entry_by_name(const char *name, uint32_t dir_cluster, logical_block_device_t *lbdev, struct fat32_private_data *private_data)
 {
+    void *res = NULL;
+
     char *name_cpy = strdup(name);
     name_cpy = strtoupper(name_cpy);
+
+    uint32_t first_fat = private_data->fat_boot->reserved_sectors * private_data->fat_boot->bytes_per_sector;
+    uint32_t *fat_section = NULL;
+    uint32_t fat_section_index = 0;
+
     uint8_t *cluster = kmalloc(private_data->fat_boot->bytes_per_sector * private_data->fat_boot->sectors_per_cluster);
+    uint32_t current_cluster_num = dir_cluster;
 
-    block_request_t request;
-    request.bdev = lbdev->parent;
-    request.buffer = cluster;
-    request.is_write = false;
-    request.lba = cluster_to_lba(dir_cluster, lbdev, private_data);
-    request.num_blocks = private_data->fat_boot->sectors_per_cluster;
-
-    submit_read_request(lbdev->parent, &request);
-
-    struct fat32_direntry *dirents = (struct fat32_direntry *)cluster;
-
-    for (uint8_t i = 0; i < 16; i++)
+    while (current_cluster_num < (uint32_t)0xFFFFFF8)
     {
-        if (dirents[i].name[0] == 0x00)
+        block_request_t request;
+        request.bdev = lbdev->parent;
+        request.buffer = cluster;
+        request.is_write = false;
+        request.lba = cluster_to_lba(current_cluster_num, lbdev, private_data);
+        request.num_blocks = private_data->fat_boot->sectors_per_cluster;
+
+        submit_read_request(lbdev->parent, &request);
+
+        struct fat32_direntry *dirents = (struct fat32_direntry *)cluster;
+
+        for (uint8_t i = 0; i < 16; i++)
         {
-            break;
+            if (dirents[i].name[0] == 0x00)
+            {
+                res = NULL;
+                goto out;
+            }
+
+            if ((uint8_t)dirents[i].name[0] == 0xE5)
+            {
+                continue;
+            }
+
+            if ((dirents[i].attr & 0x0F) == 0x0F)
+            {
+                continue;
+            }
+
+            char filename[20];
+            fat32_nameext_to_name(dirents[i].nameext, filename);
+
+            if (strncmp(filename, name_cpy, 11) == 0)
+            {
+                res = &dirents[i];
+                goto out;
+            }
         }
 
-        if ((uint8_t)dirents[i].name[0] == 0xE5)
+        uint32_t new_fat_section_index = first_fat + current_cluster_num * sizeof(uint32_t);
+        new_fat_section_index = new_fat_section_index - (new_fat_section_index % lbdev->parent->block_size);
+
+        if (fat_section == NULL || (fat_section_index != new_fat_section_index))
         {
-            continue;
+            if (fat_section == NULL)
+            {
+                fat_section = kmalloc(lbdev->parent->block_size);
+            }
+            fat_section_index = new_fat_section_index;
+
+            block_request_t request;
+            request.bdev = lbdev->parent;
+            request.buffer = (uint8_t *)fat_section;
+            request.is_write = false;
+            request.lba = lbdev->lba_offset + fat_section_index;
+            request.num_blocks = 1;
+
+            submit_read_request(lbdev->parent, &request);
         }
 
-        if ((dirents[i].attr & 0x0F) == 0x0F)
-        {
-            continue;
-        }
-
-        char filename[20];
-        fat32_nameext_to_name(dirents[i].nameext, filename);
-
-        if (strncmp(filename, name_cpy, 11) == 0)
-        {
-            kfree(cluster);
-            kfree(name_cpy);
-            return &dirents[i];
-        }
+        current_cluster_num = fat_section[(first_fat + current_cluster_num * sizeof(uint32_t)) % lbdev->parent->block_size];
     }
 
+out:
+    if (fat_section != NULL)
+    {
+        kfree(fat_section);
+    }
+    kfree(cluster);
     kfree(name_cpy);
-    return NULL;
+    return res;
 }
 
 static struct fat32_direntry *find_entry_by_index(uint32_t index, uint32_t dir_cluster, logical_block_device_t *lbdev, struct fat32_private_data *private_data)
 {
+    void *res = NULL;
+
+    uint32_t first_fat = private_data->fat_boot->reserved_sectors * private_data->fat_boot->bytes_per_sector;
+    uint32_t *fat_section = NULL;
+    uint32_t fat_section_index = 0;
+
     uint8_t *cluster = kmalloc(private_data->fat_boot->bytes_per_sector * private_data->fat_boot->sectors_per_cluster);
+    uint32_t current_cluster_num = dir_cluster;
 
-    block_request_t request;
-    request.bdev = lbdev->parent;
-    request.buffer = cluster;
-    request.is_write = false;
-    request.lba = cluster_to_lba(dir_cluster, lbdev, private_data);
-    request.num_blocks = private_data->fat_boot->sectors_per_cluster;
-
-    submit_read_request(lbdev->parent, &request);
-
-    struct fat32_direntry *dirents = (struct fat32_direntry *)cluster;
-
-    for (uint8_t i = 0; i < 16; i++)
+    while (current_cluster_num < (uint32_t)0xFFFFFF8)
     {
-        if (dirents[i].name[0] == 0x00)
+        block_request_t request;
+        request.bdev = lbdev->parent;
+        request.buffer = cluster;
+        request.is_write = false;
+        request.lba = cluster_to_lba(current_cluster_num, lbdev, private_data);
+        request.num_blocks = private_data->fat_boot->sectors_per_cluster;
+
+        submit_read_request(lbdev->parent, &request);
+
+        struct fat32_direntry *dirents = (struct fat32_direntry *)cluster;
+
+        for (uint8_t i = 0; i < 16; i++)
         {
-            break;
+            if (dirents[i].name[0] == 0x00)
+            {
+                res = NULL;
+                goto out;
+            }
+
+            if ((uint8_t)dirents[i].name[0] == 0xE5)
+            {
+                index++;
+                continue;
+            }
+
+            if ((dirents[i].attr & 0x0F) == 0x0F)
+            {
+                index++;
+                continue;
+            }
+
+            if (i == index)
+            {
+                res = &dirents[i];
+                goto out;
+            }
         }
 
-        if ((uint8_t)dirents[i].name[0] == 0xE5)
+        uint32_t new_fat_section_index = first_fat + current_cluster_num * sizeof(uint32_t);
+        new_fat_section_index = new_fat_section_index - (new_fat_section_index % lbdev->parent->block_size);
+
+        if (fat_section == NULL || (fat_section_index != new_fat_section_index))
         {
-            index++;
-            continue;
+            if (fat_section == NULL)
+            {
+                fat_section = kmalloc(lbdev->parent->block_size);
+            }
+            fat_section_index = new_fat_section_index;
+
+            block_request_t request;
+            request.bdev = lbdev->parent;
+            request.buffer = (uint8_t *)fat_section;
+            request.is_write = false;
+            request.lba = lbdev->lba_offset + fat_section_index;
+            request.num_blocks = 1;
+
+            submit_read_request(lbdev->parent, &request);
         }
 
-        if ((dirents[i].attr & 0x0F) == 0x0F)
-        {
-            index++;
-            continue;
-        }
-
-        char filename[20];
-        fat32_nameext_to_name(dirents[i].nameext, filename);
-
-        if (i == index)
-        {
-            return &dirents[i];
-        }
+        current_cluster_num = fat_section[(first_fat + current_cluster_num * sizeof(uint32_t)) % lbdev->parent->block_size];
     }
 
+out:
+    if (fat_section != NULL)
+    {
+        kfree(fat_section);
+    }
     kfree(cluster);
-    return NULL;
+    return res;
 }
 
-static uint32_t first_cluster_from_path(const char *path, logical_block_device_t *lbdev, struct fat32_private_data *private_data)
+static struct fat32_direntry *directory_entry_from_path(const char *path, logical_block_device_t *lbdev, struct fat32_private_data *private_data)
 {
+    struct fat32_direntry *direntry = NULL;
+
     char *path_cpy = strdup(path);
     char *pch = strtok(path_cpy, "/");
 
     uint32_t current_cluster = private_data->root_cluster;
     while (pch != NULL)
     {
-        struct fat32_direntry *direntry = find_entry_by_name(pch, current_cluster, lbdev, private_data);
+        direntry = find_entry_by_name(pch, current_cluster, lbdev, private_data);
         if (!direntry)
         {
             kfree(path_cpy);
-            return -1;
+            return NULL;
         }
         current_cluster = (((uint32_t)direntry->first_cluster_hi) << 16) | ((uint32_t)direntry->first_cluster_low);
 
@@ -310,7 +389,28 @@ static uint32_t first_cluster_from_path(const char *path, logical_block_device_t
     }
 
     kfree(path_cpy);
-    return current_cluster;
+    return direntry;
+}
+
+static uint32_t first_cluster_from_path(const char *path, logical_block_device_t *lbdev, struct fat32_private_data *private_data)
+{
+    if (strcmp(path, "/") == 0) // TODO: find a more 'bulletproof' way to check (ignore whitespace, ...)
+    {
+        return private_data->root_cluster;
+    }
+
+    struct fat32_direntry *direntry = directory_entry_from_path(path, lbdev, private_data);
+    if (!direntry)
+    {
+        return -1;
+    }
+
+    return (((uint32_t)direntry->first_cluster_hi) << 16) | ((uint32_t)direntry->first_cluster_low);
+}
+
+static uint32_t first_cluster_from_directory_entry(struct fat32_direntry *direntry)
+{
+    return (((uint32_t)direntry->first_cluster_hi) << 16) | ((uint32_t)direntry->first_cluster_low);
 }
 
 static struct fat32_direntry *fat32_direntry_from_path(const char *path, logical_block_device_t *lbdev, struct fat32_private_data *private_data)
@@ -341,13 +441,93 @@ static struct fat32_direntry *fat32_direntry_from_path(const char *path, logical
 
 uint32_t fat32_read(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer, logical_block_device_t *lbdev, void *private_data)
 {
-    (void)node;
-    (void)offset;
-    (void)size;
-    (void)buffer;
-    (void)lbdev;
-    (void)private_data;
-    return 0;
+    struct fat32_private_data *fat32_private_data = (struct fat32_private_data *)private_data;
+    struct fat32_direntry *direntry = directory_entry_from_path(node->path, lbdev, private_data);
+
+    if (direntry->size < offset + size)
+    {
+        return EINVARG;
+    }
+
+    uint32_t bytes_per_cluster = fat32_private_data->fat_boot->sectors_per_cluster * fat32_private_data->fat_boot->bytes_per_sector;
+
+    uint32_t first_fat = fat32_private_data->fat_boot->reserved_sectors * fat32_private_data->fat_boot->bytes_per_sector;
+    uint32_t *fat_section = NULL;
+    uint32_t fat_section_index = 0;
+
+    uint32_t current_cluster_num = first_cluster_from_directory_entry(direntry);
+    uint32_t current_offset = 0;
+
+    uint32_t buffer_index = 0;
+
+    uint8_t *cluster_buf = kmalloc(bytes_per_cluster);
+
+    while (current_cluster_num < (uint32_t)0xFFFFFF8)
+    {
+        if ((offset <= current_offset && offset + size >= current_offset && offset + size <= current_offset + bytes_per_cluster) ||
+            (offset >= current_offset && offset + size <= current_offset + bytes_per_cluster) ||
+            (offset >= current_offset && offset <= current_offset + bytes_per_cluster && offset + size >= current_offset + bytes_per_cluster) ||
+            (offset <= current_offset && offset + size > current_offset + bytes_per_cluster))
+        {
+            block_request_t request;
+            request.bdev = lbdev->parent;
+            request.buffer = cluster_buf;
+            request.is_write = false;
+            request.lba = lbdev->lba_offset + (fat32_private_data->data_start + fat32_private_data->fat_boot->sectors_per_cluster * (current_cluster_num - 2));
+            request.num_blocks = fat32_private_data->fat_boot->sectors_per_cluster;
+            kprintf("\nreading: 0x%x\n", lbdev->lba_offset + (fat32_private_data->data_start + fat32_private_data->fat_boot->sectors_per_cluster * (current_cluster_num - 2)));
+            kprintf("without offset: 0x%x\n", fat32_private_data->data_start + fat32_private_data->fat_boot->sectors_per_cluster * (current_cluster_num - 2));
+
+            submit_read_request(lbdev->parent, &request);
+
+            for (uint32_t i = 0; i < bytes_per_cluster; i++)
+            {
+                if (current_offset >= offset && current_offset <= offset + size)
+                {
+                    buffer[buffer_index++] = cluster_buf[i];
+                }
+                current_offset++;
+            }
+        }
+        else
+        {
+            current_offset += bytes_per_cluster;
+        }
+
+        uint32_t new_fat_section_index = first_fat + current_cluster_num * sizeof(uint32_t);
+        new_fat_section_index = new_fat_section_index - (new_fat_section_index % lbdev->parent->block_size);
+
+        if (fat_section == NULL || (fat_section_index != new_fat_section_index))
+        {
+            if (fat_section == NULL)
+            {
+                fat_section = kmalloc(lbdev->parent->block_size);
+            }
+            fat_section_index = new_fat_section_index;
+
+            block_request_t request;
+            request.bdev = lbdev->parent;
+            request.buffer = (uint8_t *)fat_section;
+            request.is_write = false;
+            request.lba = lbdev->lba_offset + fat_section_index;
+            request.num_blocks = 1;
+
+            kprintf("\nreading: 0x%x\n", lbdev->lba_offset + fat_section_index);
+            kprintf("without offset: 0x%x\n", fat_section_index);
+            kprintf("fat length: 0x%x\n", fat32_private_data->fat_boot->sectors_per_fat_small * 512);
+            submit_read_request(lbdev->parent, &request);
+        }
+
+        current_cluster_num = fat_section[(first_fat + current_cluster_num * sizeof(uint32_t)) % lbdev->parent->block_size];
+    }
+
+    if (fat_section != NULL)
+    {
+        kfree(fat_section);
+    }
+    kfree(cluster_buf);
+
+    return EOK;
 }
 
 uint32_t fat32_write(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer, logical_block_device_t *lbdev, void *private_data)
@@ -358,7 +538,7 @@ uint32_t fat32_write(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *b
     (void)buffer;
     (void)lbdev;
     (void)private_data;
-    return 0;
+    return EOK;
 }
 
 fs_node_t *fat32_open(const char *path, logical_block_device_t *lbdev, void *private_data)

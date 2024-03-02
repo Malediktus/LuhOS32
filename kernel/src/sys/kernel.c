@@ -19,6 +19,9 @@
 #include <kernel/fs/initrd.h>
 #include <kernel/fs/fat32.h>
 
+#define KERNEL_ALLOCATOR_VADDR 0xFFFC0000
+#define KERNEL_ALLOCATOR_SIZE 0x40000
+
 extern uint32_t _kernel_start;
 extern uint32_t _kernel_end;
 
@@ -125,10 +128,7 @@ void kernel_main(unsigned long magic, unsigned long addr)
     paging_switch_directory(kernel_page_directory);
     paging_enable();
 
-    uint32_t heap_size_bytes = 0;
-    void *heap_virtual_start = get_largest_memory_hole(mmap, mmap_size, &heap_size_bytes);
-
-    heap_init(heap_virtual_start, heap_size_bytes / PAGE_SIZE, kernel_page_directory);
+    heap_init(KERNEL_ALLOCATOR_VADDR, KERNEL_ALLOCATOR_SIZE / PAGE_SIZE, kernel_page_directory);
 
     result = ide_driver_init();
     if (result != EOK)

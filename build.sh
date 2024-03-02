@@ -17,3 +17,4 @@ pushd tools/initrd_gen;
 popd
 
 cp -f tools/initrd_gen/initrd.img sysroot/boot/luhos.initrd
+echo "this is a file test" >> sysroot/filetxt

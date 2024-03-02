@@ -10,6 +10,4 @@ void page_free(void *ptr);
 void page_reserve(void *ptr);
 uint32_t get_num_pages(void);
 
-void *get_largest_memory_hole(struct multiboot_tag_mmap *mmap, uint32_t mmap_size, uint32_t *size);
-
 #endif

@@ -100,6 +100,17 @@ void process_command(char *line, uint32_t len)
         struct dirent *node = 0;
         while ((node = readdir_fs(path_node, i)) != 0)
         {
+            if (strcmp(node->name, "FILETXT") == 0)
+            {
+                char *buf = kmalloc(6);
+                fs_node_t *_fsnode = finddir_fs(path_node, node->name);
+                read_fs(_fsnode, 0, 5, (uint8_t *)buf);
+                buf[5] = '\0';
+
+                kprintf("\nread: '%s'\n", buf);
+                kfree(buf);
+            }
+
             if (strcmp(node->name, ".") == 0 || strcmp(node->name, "..") == 0)
             {
                 limit++;
@@ -122,7 +133,6 @@ void process_command(char *line, uint32_t len)
         }
 
         kprintf("\n");
-
         close_fs(path_node);
     }
     else if (strcmp(command_info.command, "page") == 0)

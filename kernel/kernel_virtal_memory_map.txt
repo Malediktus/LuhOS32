@@ -1,0 +1,6 @@
+0x00000000 page allocator bitmap
+..
+?????????? (how much it takes)
+0xFFFC0000 kernel internal memory allocator
+..
+0xFFFG0000

@@ -2,7 +2,6 @@
 #define __KERNEL_BLOCK_DEVICE_H
 
 #include <kernel/types.h>
-#include <kernel/dev/driver_manager.h>
 
 #define MAX_BLOCK_DEVICES 10
 #define MAX_LOGICAL_BLOCK_DEVICES 50

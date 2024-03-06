@@ -2,7 +2,6 @@
 #define __KERNEL_IDE_H
 
 #include <kernel/types.h>
-#include <kernel/dev/driver_manager.h>
 #include <kernel/dev/block_device.h>
 
 uint32_t ide_driver_init();

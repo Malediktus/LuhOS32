@@ -1,4 +1,4 @@
-#include <kernel/dev/input/keyboard.h>
+#include <kernel/dev/input/keyboard_ps2.h>
 #include <kernel/ports.h>
 #include <kernel/interrupts.h>
 #include <kernel/heap.h>
@@ -16,24 +16,25 @@ void keyboard_irq(registers_t)
     keycache[key_loc++] = port_byte_in(0x60);
 }
 
-uint32_t keyboard_init(driver_t *driver)
+uint32_t keyboard_ps2_init(input_device_t *idev)
 {
-    driver->type = DRIVER_TYPE_INPUT;
-
     keycache = kmalloc(256);
     memset(keycache, 0, 256);
     register_interrupt_handler(33, keyboard_irq);
+
+    idev->get_event = keyboard_ps2_get_event;
 
     return EOK;
 }
 
 static char c = 0;
-uint32_t keyboard_get_key()
+uint32_t keyboard_ps2_get_event(input_device_t *idev, input_device_event_t *event)
 {
     c = 0;
     if (key_loc == 0)
     {
-        goto out;
+        event->type = INPUT_EVENT_NONE;
+        return EOK;
     }
 
     c = *keycache;
@@ -44,11 +45,8 @@ uint32_t keyboard_get_key()
     }
 
 out:
-    return c;
-}
+    event->type = INPUT_EVENT_KEY;
+    event->data[0] = (uint64_t)c;
 
-uint32_t keyboard_get_key_modifiers()
-{
-    // TODO: Implement
-    return 0;
+    return EOK;
 }

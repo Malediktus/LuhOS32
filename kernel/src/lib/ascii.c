@@ -1,5 +1,5 @@
 #include <kernel/lib/ascii.h>
-#include <kernel/dev/driver_manager.h>
+#include <kernel/dev/input_device.h>
 
 void int_to_ascii(int n, char str[])
 {

@@ -1,6 +1,5 @@
 #include <kernel/multiboot2.h>
 #include <kernel/types.h>
-#include <kernel/dev/driver_manager.h>
 #include <kernel/tty.h>
 #include <kernel/segmentation.h>
 #include <kernel/interrupts.h>
@@ -12,6 +11,9 @@
 #include <kernel/paging.h>
 #include <kernel/heap.h>
 #include <kernel/dev/block_device.h>
+#include <kernel/dev/char_device.h>
+#include <kernel/dev/tty/ega.h>
+#include <kernel/dev/input/keyboard_ps2.h>
 #include <kernel/dev/disk/ide.h>
 #include <kernel/shell.h>
 #include <kernel/fs/mbr.h>
@@ -26,6 +28,8 @@ extern uint32_t _kernel_start;
 extern uint32_t _kernel_end;
 
 static uint32_t *kernel_page_directory = 0;
+
+void pci_instantiate_drivers(void); // TODO: remove
 
 void kernel_main(unsigned long magic, unsigned long addr)
 {
@@ -85,13 +89,18 @@ void kernel_main(unsigned long magic, unsigned long addr)
         return;
     }
 
-    uint32_t result = driver_manager_init_early(framebuffer);
+    char_device_t ega_device = {};
+    uint32_t result = ega_driver_init(&ega_device, framebuffer);
     if (result != EOK)
     {
-        PANIC_CODE(kprintf("failed to initialize early driver manager. error: %s\n", string_error(result)));
+        PANIC_CODE(kprintf("failed to initialize ega driver. error: %s\n", string_error(result)));
     }
 
+    register_char_device(&ega_device);
+
+    init_tty(&ega_device);
     clear_tty();
+
     result = segmentation_init();
     if (result != EOK)
     {
@@ -142,24 +151,26 @@ void kernel_main(unsigned long magic, unsigned long addr)
         PANIC_CODE(kprintf("failed to scan ide disks. error: %s\n", string_error(result)));
     }
 
-    result = scan_logical_block_devices_mbr();
+    result = scan_logical_block_devices_mbr(); // TODO: abstract
     if (result != EOK)
     {
         PANIC_CODE(kprintf("failed to scan mbrs. error: %s\n", string_error(result)));
     }
 
-    result = driver_manager_init();
+    input_device_t keyboard_ps2_device = {};
+    result = keyboard_ps2_init(&keyboard_ps2_device);
     if (result != EOK)
     {
-        PANIC_CODE(kprintf("failed to initialize driver manager. error: %s\n", string_error(result)));
+        PANIC_CODE(kprintf("failed to initialize ps2 keyboard. error: %s\n", string_error(result)));
     }
+
+    register_input_device(&keyboard_ps2_device);
 
     if (initrd_start == 0x00)
     {
         PANIC_PRINT("initrd module not loaded");
     }
 
-    // TODO: select device from fstab in initrd
     logical_block_device_t **lbdevs = get_logical_block_devices();
     if (get_num_logical_block_devices() < 1)
     {
@@ -169,45 +180,7 @@ void kernel_main(unsigned long magic, unsigned long addr)
     // TODO: fix initrd
     fs_root = initialise_fat32(lbdevs[0]);
 
-    /*kprintf("scanning fat32:\n");
-
-    int i = 0;
-    struct dirent *node = 0;
-    while ((node = readdir_fs(fs_root, i)) != 0)
-    {
-        kprintf("\tfound file: %s\n", node->name);
-        fs_node_t *fsnode = finddir_fs(fs_root, node->name);
-
-        if ((fsnode->flags & 0x7) == FS_DIRECTORY)
-        {
-            kprintf("\t\t(directory)\n");
-            int j = 0;
-            struct dirent *new_node = 0;
-            while ((new_node = readdir_fs(fsnode, j)) != 0)
-            {
-                if (new_node->name[0] == '.')
-                {
-                    j++;
-                    continue;
-                }
-                kprintf("\t\tfound file: %s\n", new_node->name);
-                fs_node_t *new_fsnode = finddir_fs(fsnode, new_node->name);
-
-                if ((new_fsnode->flags & 0x7) == FS_DIRECTORY)
-                {
-                    kprintf("\t\t\t(directory)\n");
-                }
-                j++;
-            }
-        } // else
-        //{
-        //     char buf[256];
-        //     read_fs(fsnode, 0, 256, (uint8_t *)buf);
-        //     kprintf("\t\t%s\n", buf);
-        // }
-        i++;
-    }*/
-
+    pci_instantiate_drivers();
     kprintf("\033[40m  \033[41m  \033[42m  \033[43m  \033[44m  \033[45m  \033[46m  \033[47m  \033[40;1m  \033[41;1m  \033[42;1m  \033[43;1m  \033[44;1m  \033[45;1m  \033[46;1m  \033[47;1m  \033[0m\n");
 
     // TODO: I think there are many memory leaks all across the code

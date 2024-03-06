@@ -1,11 +1,11 @@
 #include <kernel/shell.h>
-#include <kernel/dev/driver_manager.h>
 #include <kernel/dev/block_device.h>
 #include <kernel/heap.h>
 #include <kernel/page_allocator.h>
 #include <kernel/lib/string.h>
 #include <kernel/lib/ascii.h>
 #include <kernel/fs/vfs.h>
+#include <kernel/dev/input_device.h>
 
 struct command_info
 {
@@ -100,17 +100,6 @@ void process_command(char *line, uint32_t len)
         struct dirent *node = 0;
         while ((node = readdir_fs(path_node, i)) != 0)
         {
-            if (strcmp(node->name, "FILETXT") == 0)
-            {
-                char *buf = kmalloc(6);
-                fs_node_t *_fsnode = finddir_fs(path_node, node->name);
-                read_fs(_fsnode, 0, 5, (uint8_t *)buf);
-                buf[5] = '\0';
-
-                kprintf("\nread: '%s'\n", buf);
-                kfree(buf);
-            }
-
             if (strcmp(node->name, ".") == 0 || strcmp(node->name, "..") == 0)
             {
                 limit++;
@@ -186,40 +175,50 @@ void run_kernel_shell()
 
     while (true)
     {
-        uint32_t key = driver_manager_get_key();
-        if (key == NULL_KEY)
-        {
-            continue;
-        }
+        input_device_t **input_devices = get_input_devices();
+        uint32_t num_input_devices = get_num_input_devices();
 
-        uint8_t ascii_key = key_code_to_ascii(key);
-        if (ascii_key == 0 || line_len >= 256)
+        for (uint32_t i = 0; i < num_input_devices; i++)
         {
-            continue;
-        }
+            input_device_event_t event = {};
+            input_device_get_event(input_devices[i], &event);
 
-        if (ascii_key == '\n')
-        {
-            kprintf("\n");
-            process_command(line, line_len);
-            kprintf("<\033[31mluh32\033[0m@\033[34;1mkernel\033[0m>$ ");
-            line_len = 0;
-            memset(line, 0, 256);
-            continue;
-        }
-        else if (ascii_key == '\b')
-        {
-            if (line_len == 0)
+            if (event.type != INPUT_EVENT_KEY)
             {
                 continue;
             }
-            line[line_len] = '\0';
-            line_len--;
-            kprintf("\b");
-            continue;
-        }
 
-        kprintf("%c", ascii_key);
-        line[line_len++] = ascii_key;
+            uint32_t key = event.data[0];
+
+            uint8_t ascii_key = key_code_to_ascii(key);
+            if (ascii_key == 0 || line_len >= 256)
+            {
+                continue;
+            }
+
+            if (ascii_key == '\n')
+            {
+                kprintf("\n");
+                process_command(line, line_len);
+                kprintf("<\033[31mluh32\033[0m@\033[34;1mkernel\033[0m>$ ");
+                line_len = 0;
+                memset(line, 0, 256);
+                continue;
+            }
+            else if (ascii_key == '\b')
+            {
+                if (line_len == 0)
+                {
+                    continue;
+                }
+                line[line_len] = '\0';
+                line_len--;
+                kprintf("\b");
+                continue;
+            }
+
+            kprintf("%c", ascii_key);
+            line[line_len++] = ascii_key;
+        }
     }
 }

@@ -128,6 +128,11 @@ void kernel_main(unsigned long magic, unsigned long addr)
         page_reserve((void *)(i * PAGE_SIZE));
     }
 
+    for (uint32_t i = ((uint32_t)initrd_start / PAGE_SIZE); i <= ((initrd_start / PAGE_SIZE) + ((uint32_t) * ((uint32_t *)initrd_start) / PAGE_SIZE)); i++)
+    {
+        page_reserve((void *)(i * PAGE_SIZE));
+    }
+
     for (uint32_t i = ((uint32_t)addr / PAGE_SIZE); i <= ((uint32_t)(addr + *(uint32_t *)addr) / PAGE_SIZE); i++)
     {
         page_reserve((void *)(i * PAGE_SIZE));
@@ -177,7 +182,34 @@ void kernel_main(unsigned long magic, unsigned long addr)
         PANIC_PRINT("no logical block device found");
     }
 
-    // TODO: fix initrd
+    kprintf("reading initrd fs...\n");
+    fs_root = initialise_initrd(initrd_start);
+    int i = 0;
+    struct dirent *node = 0;
+    while ((node = readdir_fs(fs_root, i)) != 0)
+    {
+        kprintf("%s", node->name);
+        fs_node_t *fsnode = finddir_fs(fs_root, node->name);
+        if ((fsnode->flags & 0x7) == FS_DIRECTORY)
+        {
+            kprintf(" (d)\n");
+        }
+        else
+        {
+            kprintf(" (f)\n");
+            char *buf = kmalloc(fsnode->size);
+            read_fs(fsnode, 0, fsnode->size, (uint8_t *)buf);
+            kprintf("%s\n", buf);
+            kfree(buf);
+        }
+
+        kfree(fsnode);
+
+        i++;
+    }
+
+    free_initrd();
+
     fs_root = initialise_fat32(lbdevs[0]);
 
     pci_instantiate_drivers();

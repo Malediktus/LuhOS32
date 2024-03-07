@@ -1,96 +1,93 @@
-// TODO:
-// - use command line parser and redesign interface (provide folder to transform to image instead of single files)
-// - implement subdirectories
-
-// Implementation from http://www.jamesmolloy.co.uk/
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
-#include <getopt.h>
-#include <sys/stat.h>
-#include <sys/types.h>
+#include <assert.h>
 
-struct initrd_header
+#define BLOCK_SIZE 128
+
+struct file_entry
 {
-    unsigned char magic;
-    char name[64];
-    unsigned int offset;
-    unsigned int length;
+    char filename[10];
+    uint16_t num_blocks;
+    uint32_t real_size;
+    uint16_t start_block;
+} __attribute__((packed));
+
+struct fs_header
+{
+    uint32_t size;
+    uint32_t signature;
+    struct file_entry file_table[28];
 } __attribute__((packed));
 
 int main(int argc, char **argv)
 {
-    /*char *in_directory = NULL;
-    char *out_filename = NULL;
-    int c = 0;
-    opterr = 0;
+    assert(sizeof(struct fs_header) == 512);
 
-    while ((c = getopt(argc, argv, "i:o:")) != -1)
+    if (argc % 2 != 1)
     {
-        switch (c)
-        {
-        case 'i':
-            in_directory = optarg;
-            break;
-        case 'o':
-            out_filename = optarg;
-            break;
-        }
-    }
-
-    if (!in_directory)
-    {
-        fprintf(stderr, "no input directory specified\nuse -i {input directory} and -o {output file}\n");
+        fprintf(stderr, "Usage: %s host_file1 guest_file1 host_file2 guest_file2 ...\n", argv[0]);
         return 1;
     }
 
-    if (!out_filename)
+    FILE *img = fopen("initrd.img", "wb");
+    if (!img)
     {
-        fprintf(stderr, "no output file specified\nuse -i {input directory} and -o {output file}\n");
+        fprintf(stderr, "Error: failed to open file initrd.img");
         return 1;
-    }*/
-    int nheaders = (argc - 1) / 2;
-    struct initrd_header headers[64];
-    printf("size of header: %ld\n", sizeof(struct initrd_header));
-    unsigned int off = sizeof(struct initrd_header) * 64 + sizeof(int);
-    int i;
-    for (i = 0; i < nheaders; i++)
+    }
+
+    printf("Writing initrd to initrd.img\n");
+
+    fseek(img, 512, SEEK_SET);
+
+    struct fs_header header = {};
+    header.signature = 0xAFA0010D;
+
+    uint32_t num_files = 0;
+    uint32_t current_block = 0;
+
+    for (int i = 1; i < argc; i += 2)
     {
-        printf("writing file %s->%s at 0x%x\n", argv[i * 2 + 1], argv[i * 2 + 2], off);
-        strcpy(headers[i].name, argv[i * 2 + 2]);
-        headers[i].offset = off;
-        FILE *stream = fopen(argv[i * 2 + 1], "r");
-        if (stream == 0)
+        char *host_file = argv[i];
+        char *guest_file = argv[i + 1];
+
+        printf("%s => %s\n", host_file, guest_file);
+
+        FILE *fp = fopen(host_file, "r");
+        if (!fp)
         {
-            printf("Error: file not found: %s\n", argv[i * 2 + 1]);
+            fprintf(stderr, "Error: failed to open file %s", host_file);
             return 1;
         }
-        fseek(stream, 0, SEEK_END);
-        headers[i].length = ftell(stream);
-        off += headers[i].length;
-        fclose(stream);
-        headers[i].magic = 0xBF;
+
+        fseek(fp, 0, SEEK_END);
+        long file_size = ftell(fp);
+        fseek(fp, 0, SEEK_SET);
+
+        struct file_entry file_entry = {};
+#pragma GCC diagnostic ignored "-Wstringop-truncation"
+        strncpy(file_entry.filename, guest_file, 10);
+
+        file_entry.real_size = file_size;
+        file_entry.num_blocks = (file_size + (BLOCK_SIZE - 1)) / BLOCK_SIZE;
+        file_entry.start_block = current_block;
+        current_block += file_entry.num_blocks;
+
+        header.file_table[num_files++] = file_entry;
+
+        uint8_t *data = malloc(file_entry.num_blocks * BLOCK_SIZE);
+        memset(data, 0, file_entry.num_blocks * BLOCK_SIZE);
+        fread(data, file_size, 1, fp);
+
+        fwrite(data, file_entry.num_blocks * BLOCK_SIZE, 1, img);
     }
 
-    FILE *wstream = fopen("./initrd.img", "w");
-    unsigned char *data = (unsigned char *)malloc(off);
-    fwrite(&nheaders, sizeof(int), 1, wstream);
-    fwrite(headers, sizeof(struct initrd_header), 64, wstream);
+    header.size = ftell(img);
 
-    for (i = 0; i < nheaders; i++)
-    {
-        FILE *stream = fopen(argv[i * 2 + 1], "r");
-        unsigned char *buf = (unsigned char *)malloc(headers[i].length);
-        fread(buf, 1, headers[i].length, stream);
-        fwrite(buf, 1, headers[i].length, wstream);
-        fclose(stream);
-        free(buf);
-    }
-
-    fclose(wstream);
-    free(data);
+    fseek(img, 0, SEEK_SET);
+    fwrite(&header, 512, 1, img);
 
     return 0;
 }

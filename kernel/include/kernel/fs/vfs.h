@@ -29,6 +29,7 @@ typedef struct fs_node *(*finddir_type_t)(struct fs_node *, char *name, logical_
 typedef struct fs_node
 {
     char path[128];
+    uint32_t size;
     uint32_t mask;
     uint32_t uid;
     uint32_t gid;

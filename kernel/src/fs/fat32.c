@@ -1,55 +1,72 @@
 #include <kernel/fs/fat32.h>
 #include <kernel/lib/string.h>
+#include <kernel/lib/ascii.h>
 #include <kernel/heap.h>
 #include <kernel/dev/block_device.h>
 
-// TODO:
-// - read files
-// - long filename support
-// - fix memory leaks
-// - writing support
+#define BACKUP_SECTOR_NUM 6
+#define ROUND_UP_INT_DIV(x, y) (x + y - 1) / y
 
-struct fat32_boot_info
+#define ATTR_READ_ONLY 0x01
+#define ATTR_HIDDEN 0x02
+#define ATTR_SYSTEM 0x04
+#define ATTR_VOLUME_ID 0x08
+#define ATTR_DIRECTORY 0x10
+#define ATTR_ARCHIVE 0x20
+#define ATTR_LONG_NAME (ATTR_READ_ONLY | ATTR_HIDDEN | ATTR_SYSTEM | ATTR_VOLUME_ID)
+#define ATTR_INVALID (0x80 | 0x40 | 0x08)
+
+struct FAT32_bpb
 {
-    uint32_t sectors_per_fat;
-    uint16_t fat_flags;
-    uint16_t version;
+    uint32_t FAT_size_32;
+    uint16_t ext_flags;
+    uint16_t filesystem_version;
     uint32_t root_cluster;
-    uint16_t fsinfo_sector;
-    uint16_t backup_sector;
-    uint8_t reserved1[12];
-    uint8_t driver_number;
-    uint8_t ext_sig;
-    uint32_t serial;
-    char label[11];
-    char type[8];
+    uint16_t filesystem_info;
+    uint16_t backup_boot_sector;
+    uint8_t zero1[12];
+    uint8_t drive_num;
+    uint8_t reserved;
+    uint8_t boot_signature;
+    uint32_t volume_ID;
+    char volume_label[11];
+    char filesystem_type[8];
+    uint8_t zero2[420];
+    uint16_t signature;
 } __attribute__((packed));
 
-struct fat32_boot_sectors
+struct bios_parameter_block
+{
+    uint16_t byter_per_sector;
+    uint8_t sectors_per_cluster;
+    uint16_t reserved_sector_count;
+    uint8_t num_FATs;
+    uint16_t root_entry_count;
+    uint16_t total_sectors_16;
+    uint8_t media;
+    uint16_t FAT_size_16;
+    uint16_t sectors_per_track;
+    uint16_t num_heads;
+    uint32_t hidden_sectors;
+    uint32_t total_sectors_32;
+
+    struct FAT32_bpb FAT32;
+} __attribute__((packed));
+
+struct boot_sector
 {
     uint8_t jmp_boot[3];
-    char oemname[8];
-    uint16_t bytes_per_sector;
-    uint8_t sectors_per_cluster;
-    uint16_t reserved_sectors;
-    uint8_t fat_count;
-    uint16_t root_max_entries;
-    uint16_t total_sectors_small;
-    uint8_t media_info;
-    uint16_t sectors_per_fat_small;
-    uint16_t sectors_per_track;
-    uint16_t head_count;
-    uint32_t fs_offset;
-    uint32_t total_sectors;
-    struct fat32_boot_info fat32;
+    char OEM_name[8];
+    struct bios_parameter_block bpb;
 } __attribute__((packed));
 
-struct fat32_direntry
+struct directory_entry
 {
     union
     {
         struct
         {
+
             char name[8];
             char ext[3];
         };
@@ -58,56 +75,167 @@ struct fat32_direntry
 
     uint8_t attr;
     uint8_t reserved;
-    uint8_t c_time_thenth;
-    uint16_t c_time;
-    uint16_t c_date;
-    uint16_t a_time;
+    uint8_t creation_time_tenth;
+    uint16_t creation_time;
+    uint16_t creation_date;
+    uint16_t last_access_date;
     uint16_t first_cluster_hi;
-    uint16_t w_time;
-    uint16_t w_date;
+    uint16_t write_time;
+    uint16_t write_date;
     uint16_t first_cluster_low;
-    uint32_t size;
+    uint32_t file_size;
 } __attribute__((packed));
 
-#define ATTR_READ_ONLY 0x01
-#define ATTR_HIDDEN 0x02
-#define ATTR_SYSTEM 0x04
-#define ATTR_VOLUME_ID 0x08
-#define ATTR_DIRECTORY 0x10
-#define ATTR_ARCHIVE 0x20
-#define VFAT_ATTR_LFN 0xf
-#define ATTR_LONG_NAME (ATTR_READ_ONLY | ATTR_HIDDEN | ATTR_SYSTEM | ATTR_VOLUME_ID)
-#define VFAT_ATTR_INVAL (0x80 | 0x40 | 0x08)
-
-struct fat32_direntry_long
+struct lfn_directory_entry
 {
-    uint8_t seq;
+    uint8_t ord;
     uint16_t name1[5];
     uint8_t attr;
     uint8_t type;
-    uint8_t csum;
+    uint8_t checksum;
     uint16_t name2[6];
-    uint16_t reserved2;
+    uint16_t first_cluster_low;
     uint16_t name3[2];
-} __attribute__((__packed__));
+} __attribute__((packed));
 
-#define VFAT_LFN_SEQ_START 0x40
-#define VFAT_LFN_SEQ_DELETED 0x80
-#define VFAT_LFN_SEQ_MASK 0x3f
-
-struct fat32_private_data
+static void read_fat_device(logical_block_device_t *lbdev, uint32_t lba, uint32_t num_blocks, uint8_t *buf)
 {
-    struct fat32_boot_sectors *fat_boot;
-    uint32_t data_start;
-    uint32_t root_cluster;
-};
+    block_request_t request = {};
+    request.bdev = lbdev->parent;
+    request.buffer = buf;
+    request.is_write = false;
+    request.lba = lba + lbdev->lba_offset;
+    request.num_blocks = num_blocks;
 
-uint32_t fat32_read(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer, logical_block_device_t *lbdev, void *private_data);
-uint32_t fat32_write(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer, logical_block_device_t *lbdev, void *private_data);
-fs_node_t *fat32_open(const char *path, logical_block_device_t *lbdev, void *private_data);
-void fat32_close(fs_node_t *node, logical_block_device_t *lbdev, void *private_data);
-struct dirent *fat32_readdir(fs_node_t *node, uint32_t index, logical_block_device_t *lbdev, void *private_data);
-fs_node_t *fat32_finddir(fs_node_t *node, char *name, logical_block_device_t *lbdev, void *private_data);
+    submit_read_request(lbdev->parent, &request);
+}
+
+static void write_fat_device(logical_block_device_t *lbdev, uint32_t lba, uint32_t num_blocks, uint8_t *buf)
+{
+    block_request_t request = {};
+    request.bdev = lbdev->parent;
+    request.buffer = buf;
+    request.is_write = true;
+    request.lba = lba + lbdev->lba_offset;
+    request.num_blocks = num_blocks;
+
+    submit_write_request(lbdev->parent, &request);
+}
+
+static void verify_boot_sector(struct boot_sector *boot_sector, uint32_t bytes_per_sector)
+{
+    if (!(boot_sector->jmp_boot[0] == 0xEB && boot_sector->jmp_boot[2] == 0x90) && boot_sector->jmp_boot[0] != 0xE9)
+    {
+        PANIC_PRINT("corrupted boot sector: invalid jmp_boot field");
+    }
+
+    if (boot_sector->bpb.byter_per_sector != bytes_per_sector)
+    {
+        if (boot_sector->bpb.byter_per_sector == 512 || boot_sector->bpb.byter_per_sector == 1024 || boot_sector->bpb.byter_per_sector == 2048 || boot_sector->bpb.byter_per_sector == 4096)
+        {
+            PANIC_PRINT("corrupted bios parameter block: invalid bytes_per_sector field");
+        }
+        else
+        {
+            PANIC_PRINT("wrong bytes per sector argument specified");
+        }
+    }
+
+    if (boot_sector->bpb.sectors_per_cluster == 0 || (boot_sector->bpb.sectors_per_cluster & (boot_sector->bpb.sectors_per_cluster - 1)) != 0)
+    {
+        PANIC_PRINT("corrupted bios parameter block: sectors_per_cluster must be power of two and non zero");
+    }
+
+    if (boot_sector->bpb.reserved_sector_count == 0)
+    {
+        PANIC_PRINT("corrupted bios parameter block: reserved_sector_count should be a non zero value");
+    }
+
+    if (boot_sector->bpb.root_entry_count != 0)
+    {
+        PANIC_PRINT("corrupted bios parameter block: not a FAT32 variant");
+    }
+
+    if (boot_sector->bpb.total_sectors_16 != 0)
+    {
+        PANIC_PRINT("corrupted bios parameter block: total_sectors_16 should be zero on a FAT32 variant");
+    }
+
+    if (boot_sector->bpb.media != 0xF0 && boot_sector->bpb.media < 0xF8)
+    {
+        PANIC_PRINT("corrupted bios parameter block: invalid media field");
+    }
+
+    if (boot_sector->bpb.FAT_size_16 != 0)
+    {
+        PANIC_PRINT("corrupted bios parameter block: FAT_size_16 should be zero on a FAT32 variant");
+    }
+
+    if (boot_sector->bpb.total_sectors_32 == 0)
+    {
+        PANIC_PRINT("corrupted bios parameter block: total_sectors_32 should be non zero on a FAT32 variant");
+    }
+
+    if (boot_sector->bpb.total_sectors_32 == 0 && boot_sector->bpb.total_sectors_16 == 0)
+    {
+        PANIC_PRINT("corrupted bios parameter block: total_sectors_16 and total_sectors_32 or both zero");
+    }
+
+    if (boot_sector->bpb.FAT32.filesystem_version != 0)
+    {
+        PANIC_PRINT("corrupted bios parameter block: filesystem_version must be zero");
+    }
+
+    if (boot_sector->bpb.FAT32.root_cluster < 2)
+    {
+        PANIC_PRINT("corrupted bios parameter block: root_cluster is less then two");
+    }
+
+    if (boot_sector->bpb.FAT32.backup_boot_sector != 0 && boot_sector->bpb.FAT32.backup_boot_sector != 6)
+    {
+        PANIC_PRINT("corrupted bios parameter block: backup_boot_sector field must be either zero or six");
+    }
+
+    if (boot_sector->bpb.FAT32.reserved != 0)
+    {
+        PANIC_PRINT("corrupted bios parameter block: reserved value is not zero");
+    }
+
+    if (strncmp(boot_sector->bpb.FAT32.filesystem_type, "FAT32", 5))
+    {
+        PANIC_PRINT("corrupted bios parameter block: invalid filesystem_type field");
+    }
+
+    if (boot_sector->bpb.FAT32.signature != 0xAA55)
+    {
+        PANIC_PRINT("corrupted bios parameter block: wrong boot signature");
+    }
+
+    char OEM_name[9];
+    strncpy(OEM_name, boot_sector->OEM_name, 8);
+    OEM_name[8] = 0;
+
+    char volume_label[12];
+    strncpy(volume_label, boot_sector->bpb.FAT32.volume_label, 11);
+    volume_label[11] = 0;
+
+    kprintf("boot sector and bios parameter block verified\nOEM name: %s\nvolume label: %s\n", OEM_name, volume_label);
+}
+
+struct boot_sector *scan_fat(uint32_t bytes_per_sector, logical_block_device_t *lbdev)
+{
+    struct boot_sector *boot_sector = kmalloc(bytes_per_sector);
+    read_fat_device(lbdev, 0, 1, (uint8_t *)boot_sector);
+    verify_boot_sector(boot_sector, bytes_per_sector);
+
+    return boot_sector;
+}
+
+void free_fat()
+{
+    kfree(fs_root->fs_private_data);
+    kfree(fs_root);
+}
 
 static char *fat32_nameext_to_name(const char *nameext, char *filename)
 {
@@ -186,433 +314,411 @@ static char *fat32_nameext_to_name(const char *nameext, char *filename)
     return filename;
 }
 
-static uint32_t cluster_to_lba(uint32_t cluster, logical_block_device_t *lbdev, struct fat32_private_data *private_data)
+static void read_cluster(uint32_t cluster_num, uint8_t *buf, struct boot_sector *boot_sector, logical_block_device_t *lbdev)
 {
-    (void)lbdev;
-    return private_data->data_start + private_data->fat_boot->sectors_per_cluster * (cluster - 2);
+    uint32_t fat_size = boot_sector->bpb.FAT_size_16;
+    if (fat_size == 0)
+    {
+        fat_size = boot_sector->bpb.FAT32.FAT_size_32;
+    }
+
+    uint32_t data_start = boot_sector->bpb.reserved_sector_count + boot_sector->bpb.num_FATs * fat_size;
+    uint32_t lba = data_start + cluster_num - 2;
+
+    read_fat_device(lbdev, lba, boot_sector->bpb.sectors_per_cluster, buf);
 }
 
-static struct fat32_direntry *find_entry_by_name(const char *name, uint32_t dir_cluster, logical_block_device_t *lbdev, struct fat32_private_data *private_data)
+static uint32_t read_fat_entry(uint32_t cluster_num, struct boot_sector *boot_sector, logical_block_device_t *lbdev)
 {
-    void *res = NULL;
+    uint32_t fat_index = cluster_num * sizeof(uint32_t);
+    uint32_t lba_offset = fat_index % boot_sector->bpb.byter_per_sector;
+    uint32_t lba = boot_sector->bpb.reserved_sector_count + fat_index - lba_offset;
 
-    char *name_cpy = strdup(name);
-    name_cpy = strtoupper(name_cpy);
+    uint8_t *fat_section = kmalloc(boot_sector->bpb.byter_per_sector);
+    read_fat_device(lbdev, lba, 1, fat_section);
 
-    uint32_t first_fat = private_data->fat_boot->reserved_sectors * private_data->fat_boot->bytes_per_sector;
-    uint32_t *fat_section = NULL;
-    uint32_t fat_section_index = 0;
+    uint32_t fat_entry = fat_section[lba_offset];
 
-    uint8_t *cluster = kmalloc(private_data->fat_boot->bytes_per_sector * private_data->fat_boot->sectors_per_cluster);
-    uint32_t current_cluster_num = dir_cluster;
+    kfree(fat_section);
+    return fat_entry;
+}
 
-    while (current_cluster_num < (uint32_t)0xFFFFFF8)
+static struct directory_entry *find_entry_by_name(const char *name, uint32_t directory_cluster_num, struct boot_sector *boot_sector, logical_block_device_t *lbdev)
+{
+    uint32_t current_cluster = directory_cluster_num;
+    uint8_t *cluster_buf = kmalloc(boot_sector->bpb.sectors_per_cluster * boot_sector->bpb.byter_per_sector);
+
+    while (current_cluster < 0x0FFFFFF8)
     {
-        block_request_t request;
-        request.bdev = lbdev->parent;
-        request.buffer = cluster;
-        request.is_write = false;
-        request.lba = cluster_to_lba(current_cluster_num, lbdev, private_data);
-        request.num_blocks = private_data->fat_boot->sectors_per_cluster;
-
-        submit_read_request(lbdev->parent, &request);
-
-        struct fat32_direntry *dirents = (struct fat32_direntry *)cluster;
-
+        read_cluster(current_cluster, cluster_buf, boot_sector, lbdev);
+        struct directory_entry *direntries = (struct directory_entry *)cluster_buf;
         for (uint8_t i = 0; i < 16; i++)
         {
-            if (dirents[i].name[0] == 0x00)
+            if (direntries[i].name[0] == 0x00)
             {
-                res = NULL;
-                goto out;
+                kfree(cluster_buf);
+                return NULL;
             }
 
-            if ((uint8_t)dirents[i].name[0] == 0xE5)
+            if ((uint8_t)direntries[i].name[0] == 0xE5)
             {
                 continue;
             }
 
-            if ((dirents[i].attr & 0x0F) == 0x0F)
+            if ((direntries[i].attr & ATTR_LONG_NAME) == ATTR_LONG_NAME)
             {
                 continue;
             }
 
-            char filename[20];
-            fat32_nameext_to_name(dirents[i].nameext, filename);
-
-            if (strncmp(filename, name_cpy, 11) == 0)
+            char filename[256];
+            if (i >= 1 && ((direntries[i - 1].attr & ATTR_LONG_NAME) == ATTR_LONG_NAME))
             {
-                res = &dirents[i];
-                goto out;
+                uint32_t long_filename_size = 0;
+
+                uint32_t j = i;
+                while (j >= 1 && ((direntries[j - 1].attr & ATTR_LONG_NAME) == ATTR_LONG_NAME))
+                {
+                    j--;
+                    for (uint8_t k = 0; k < 5; k++)
+                    {
+                        filename[long_filename_size++] = utf16_to_ascii(((struct lfn_directory_entry *)&direntries[j])->name1[k]);
+                    }
+                    for (uint8_t k = 0; k < 6; k++)
+                    {
+                        filename[long_filename_size++] = utf16_to_ascii(((struct lfn_directory_entry *)&direntries[j])->name2[k]);
+                    }
+                    for (uint8_t k = 0; k < 2; k++)
+                    {
+                        filename[long_filename_size++] = utf16_to_ascii(((struct lfn_directory_entry *)&direntries[j])->name3[k]);
+                    }
+                }
+
+                filename[long_filename_size] = '\0';
+            }
+            else
+            {
+                fat32_nameext_to_name(direntries[i].nameext, filename);
+            }
+
+            if (strncmp(filename, name, 11) == 0)
+            {
+                struct directory_entry *res = kmalloc(sizeof(struct directory_entry));
+                memcpy(res, &direntries[i], sizeof(struct directory_entry));
+                kfree(cluster_buf);
+                return res;
             }
         }
 
-        uint32_t new_fat_section_index = first_fat + current_cluster_num * sizeof(uint32_t);
-        new_fat_section_index = new_fat_section_index - (new_fat_section_index % lbdev->parent->block_size);
-
-        if (fat_section == NULL || (fat_section_index != new_fat_section_index))
-        {
-            if (fat_section == NULL)
-            {
-                fat_section = kmalloc(lbdev->parent->block_size);
-            }
-            fat_section_index = new_fat_section_index;
-
-            block_request_t request;
-            request.bdev = lbdev->parent;
-            request.buffer = (uint8_t *)fat_section;
-            request.is_write = false;
-            request.lba = lbdev->lba_offset + fat_section_index;
-            request.num_blocks = 1;
-
-            submit_read_request(lbdev->parent, &request);
-        }
-
-        current_cluster_num = fat_section[(first_fat + current_cluster_num * sizeof(uint32_t)) % lbdev->parent->block_size];
+        current_cluster = read_fat_entry(current_cluster, boot_sector, lbdev);
     }
 
-out:
-    if (fat_section != NULL)
-    {
-        kfree(fat_section);
-    }
-    kfree(cluster);
-    kfree(name_cpy);
-    return res;
+    kfree(cluster_buf);
+    return NULL;
 }
 
-static struct fat32_direntry *find_entry_by_index(uint32_t index, uint32_t dir_cluster, logical_block_device_t *lbdev, struct fat32_private_data *private_data)
+static struct directory_entry *find_entry_by_index(uint32_t index, uint32_t directory_cluster_num, char *filename /*256 bytes*/, struct boot_sector *boot_sector, logical_block_device_t *lbdev)
 {
-    void *res = NULL;
+    uint32_t current_cluster = directory_cluster_num;
+    uint8_t *cluster_buf = kmalloc(boot_sector->bpb.sectors_per_cluster * boot_sector->bpb.byter_per_sector);
 
-    uint32_t first_fat = private_data->fat_boot->reserved_sectors * private_data->fat_boot->bytes_per_sector;
-    uint32_t *fat_section = NULL;
-    uint32_t fat_section_index = 0;
-
-    uint8_t *cluster = kmalloc(private_data->fat_boot->bytes_per_sector * private_data->fat_boot->sectors_per_cluster);
-    uint32_t current_cluster_num = dir_cluster;
-
-    while (current_cluster_num < (uint32_t)0xFFFFFF8)
+    uint32_t j = 0;
+    while (current_cluster < 0x0FFFFFF8)
     {
-        block_request_t request;
-        request.bdev = lbdev->parent;
-        request.buffer = cluster;
-        request.is_write = false;
-        request.lba = cluster_to_lba(current_cluster_num, lbdev, private_data);
-        request.num_blocks = private_data->fat_boot->sectors_per_cluster;
-
-        submit_read_request(lbdev->parent, &request);
-
-        struct fat32_direntry *dirents = (struct fat32_direntry *)cluster;
-
+        read_cluster(current_cluster, cluster_buf, boot_sector, lbdev);
+        struct directory_entry *direntries = (struct directory_entry *)cluster_buf;
         for (uint8_t i = 0; i < 16; i++)
         {
-            if (dirents[i].name[0] == 0x00)
+            if (direntries[i].name[0] == 0x00)
             {
-                res = NULL;
-                goto out;
+                kfree(cluster_buf);
+                return NULL;
             }
 
-            if ((uint8_t)dirents[i].name[0] == 0xE5)
+            if ((uint8_t)direntries[i].name[0] == 0xE5)
             {
                 index++;
                 continue;
             }
 
-            if ((dirents[i].attr & 0x0F) == 0x0F)
+            if ((direntries[i].attr & 0x0F) == 0x0F)
             {
                 index++;
                 continue;
             }
 
-            if (i == index)
+            if (index == j + i)
             {
-                res = &dirents[i];
-                goto out;
+                if (i >= 1 && ((direntries[i - 1].attr & ATTR_LONG_NAME) == ATTR_LONG_NAME))
+                {
+                    uint32_t long_filename_size = 0;
+
+                    uint32_t j = i;
+                    while (j >= 1 && ((direntries[j - 1].attr & ATTR_LONG_NAME) == ATTR_LONG_NAME))
+                    {
+                        j--;
+                        for (uint8_t k = 0; k < 5; k++)
+                        {
+                            filename[long_filename_size++] = utf16_to_ascii(((struct lfn_directory_entry *)&direntries[j])->name1[k]);
+                        }
+                        for (uint8_t k = 0; k < 6; k++)
+                        {
+                            filename[long_filename_size++] = utf16_to_ascii(((struct lfn_directory_entry *)&direntries[j])->name2[k]);
+                        }
+                        for (uint8_t k = 0; k < 2; k++)
+                        {
+                            filename[long_filename_size++] = utf16_to_ascii(((struct lfn_directory_entry *)&direntries[j])->name3[k]);
+                        }
+                    }
+
+                    filename[long_filename_size] = '\0';
+                }
+                else
+                {
+                    fat32_nameext_to_name(direntries[i].nameext, filename);
+                }
+
+                struct directory_entry *res = kmalloc(sizeof(struct directory_entry));
+                memcpy(res, &direntries[i], sizeof(struct directory_entry));
+                kfree(cluster_buf);
+                return res;
             }
         }
 
-        uint32_t new_fat_section_index = first_fat + current_cluster_num * sizeof(uint32_t);
-        new_fat_section_index = new_fat_section_index - (new_fat_section_index % lbdev->parent->block_size);
-
-        if (fat_section == NULL || (fat_section_index != new_fat_section_index))
-        {
-            if (fat_section == NULL)
-            {
-                fat_section = kmalloc(lbdev->parent->block_size);
-            }
-            fat_section_index = new_fat_section_index;
-
-            block_request_t request;
-            request.bdev = lbdev->parent;
-            request.buffer = (uint8_t *)fat_section;
-            request.is_write = false;
-            request.lba = lbdev->lba_offset + fat_section_index;
-            request.num_blocks = 1;
-
-            submit_read_request(lbdev->parent, &request);
-        }
-
-        current_cluster_num = fat_section[(first_fat + current_cluster_num * sizeof(uint32_t)) % lbdev->parent->block_size];
+        current_cluster = read_fat_entry(current_cluster, boot_sector, lbdev);
+        j += 16;
     }
 
-out:
-    if (fat_section != NULL)
-    {
-        kfree(fat_section);
-    }
-    kfree(cluster);
-    return res;
+    kfree(cluster_buf);
+    return NULL;
 }
 
-static struct fat32_direntry *directory_entry_from_path(const char *path, logical_block_device_t *lbdev, struct fat32_private_data *private_data)
+static struct directory_entry *direntry_from_path(const char *path, struct boot_sector *boot_sector, logical_block_device_t *lbdev)
 {
-    struct fat32_direntry *direntry = NULL;
+    struct directory_entry *direntry = (struct directory_entry *)1; // TODO: this is a bad way of signaling the root directory
 
     char *path_cpy = strdup(path);
     char *pch = strtok(path_cpy, "/");
 
-    uint32_t current_cluster = private_data->root_cluster;
+    uint32_t current_cluster = boot_sector->bpb.FAT32.root_cluster;
     while (pch != NULL)
     {
-        direntry = find_entry_by_name(pch, current_cluster, lbdev, private_data);
+        direntry = find_entry_by_name(pch, current_cluster, boot_sector, lbdev);
         if (!direntry)
         {
             kfree(path_cpy);
             return NULL;
         }
         current_cluster = (((uint32_t)direntry->first_cluster_hi) << 16) | ((uint32_t)direntry->first_cluster_low);
-
-        char filename[20];
-        fat32_nameext_to_name(direntry->nameext, filename);
         pch = strtok(NULL, "/");
+        if (pch != NULL)
+        {
+            kfree(direntry);
+        }
     }
-
     kfree(path_cpy);
+
     return direntry;
 }
 
-static uint32_t first_cluster_from_path(const char *path, logical_block_device_t *lbdev, struct fat32_private_data *private_data)
+static uint32_t first_cluster_from_direntry(struct directory_entry *direntry)
+{
+    return (((uint32_t)direntry->first_cluster_hi) << 16) | ((uint32_t)direntry->first_cluster_low);
+}
+
+static uint32_t first_cluster_from_path(const char *path, struct boot_sector *boot_sector, logical_block_device_t *lbdev)
 {
     if (strcmp(path, "/") == 0) // TODO: find a more 'bulletproof' way to check (ignore whitespace, ...)
     {
-        return private_data->root_cluster;
+        return boot_sector->bpb.FAT32.root_cluster;
     }
 
-    struct fat32_direntry *direntry = directory_entry_from_path(path, lbdev, private_data);
+    struct directory_entry *direntry = direntry_from_path(path, boot_sector, lbdev);
     if (!direntry)
     {
         return -1;
     }
 
-    return (((uint32_t)direntry->first_cluster_hi) << 16) | ((uint32_t)direntry->first_cluster_low);
+    return first_cluster_from_direntry(direntry);
 }
 
-static uint32_t first_cluster_from_directory_entry(struct fat32_direntry *direntry)
+uint32_t read_fat32(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
-    return (((uint32_t)direntry->first_cluster_hi) << 16) | ((uint32_t)direntry->first_cluster_low);
-}
+    struct boot_sector *boot_sector = (struct boot_sector *)node->fs_private_data;
+    logical_block_device_t *lbdev = node->lbdev;
 
-static struct fat32_direntry *fat32_direntry_from_path(const char *path, logical_block_device_t *lbdev, struct fat32_private_data *private_data)
-{
-    char *path_cpy = strdup(path);
-    char *pch = strtok(path_cpy, "/");
-
-    uint32_t current_cluster = private_data->root_cluster;
-    struct fat32_direntry *current_direntry = 0;
-    while (pch != NULL)
-    {
-        current_direntry = find_entry_by_name(pch, current_cluster, lbdev, private_data);
-        if (!current_direntry)
-        {
-            kfree(path_cpy);
-            return NULL;
-        }
-        current_cluster = (((uint32_t)current_direntry->first_cluster_hi) << 16) | ((uint32_t)current_direntry->first_cluster_low);
-
-        char filename[20];
-        fat32_nameext_to_name(current_direntry->nameext, filename);
-        pch = strtok(NULL, "/");
-    }
-
-    kfree(path_cpy);
-    return current_direntry;
-}
-
-uint32_t fat32_read(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer, logical_block_device_t *lbdev, void *private_data)
-{
-    struct fat32_private_data *fat32_private_data = (struct fat32_private_data *)private_data;
-    struct fat32_direntry *direntry = directory_entry_from_path(node->path, lbdev, private_data);
-
-    if (direntry->size < offset + size)
-    {
-        return EINVARG;
-    }
-
-    uint32_t bytes_per_cluster = fat32_private_data->fat_boot->sectors_per_cluster * fat32_private_data->fat_boot->bytes_per_sector;
-
-    uint32_t first_fat = fat32_private_data->fat_boot->reserved_sectors * fat32_private_data->fat_boot->bytes_per_sector;
-    uint32_t *fat_section = NULL;
-    uint32_t fat_section_index = 0;
-
-    uint32_t current_cluster_num = first_cluster_from_directory_entry(direntry);
-    uint32_t current_offset = 0;
-
-    uint32_t buffer_index = 0;
-
+    uint32_t current_cluster = first_cluster_from_path(node->path, boot_sector, lbdev);
+    uint32_t bytes_per_cluster = boot_sector->bpb.sectors_per_cluster * boot_sector->bpb.byter_per_sector;
     uint8_t *cluster_buf = kmalloc(bytes_per_cluster);
 
-    while (current_cluster_num < (uint32_t)0xFFFFFF8)
+    uint32_t current_cluster_num = 0;
+    uint32_t buffer_index = 0;
+
+    while (current_cluster < 0x0FFFFFF8)
     {
-        if ((offset <= current_offset && offset + size >= current_offset && offset + size <= current_offset + bytes_per_cluster) ||
-            (offset >= current_offset && offset + size <= current_offset + bytes_per_cluster) ||
-            (offset >= current_offset && offset <= current_offset + bytes_per_cluster && offset + size >= current_offset + bytes_per_cluster) ||
-            (offset <= current_offset && offset + size > current_offset + bytes_per_cluster))
+        uint32_t byte_offset = current_cluster_num * bytes_per_cluster;
+        if (offset >= byte_offset && offset < (byte_offset + bytes_per_cluster))
         {
-            block_request_t request;
-            request.bdev = lbdev->parent;
-            request.buffer = cluster_buf;
-            request.is_write = false;
-            request.lba = lbdev->lba_offset + (fat32_private_data->data_start + fat32_private_data->fat_boot->sectors_per_cluster * (current_cluster_num - 2));
-            request.num_blocks = fat32_private_data->fat_boot->sectors_per_cluster;
-            kprintf("\nreading: 0x%x\n", lbdev->lba_offset + (fat32_private_data->data_start + fat32_private_data->fat_boot->sectors_per_cluster * (current_cluster_num - 2)));
-            kprintf("without offset: 0x%x\n", fat32_private_data->data_start + fat32_private_data->fat_boot->sectors_per_cluster * (current_cluster_num - 2));
+            read_cluster(current_cluster, cluster_buf, boot_sector, lbdev);
+            uint32_t cluster_offset = offset - byte_offset;
+            uint32_t cpy_size = (size > (bytes_per_cluster - cluster_offset)) ? (bytes_per_cluster - cluster_offset) : size;
 
-            submit_read_request(lbdev->parent, &request);
+            memcpy((void *)((uintptr_t)buffer + buffer_index), (void *)((uintptr_t)cluster_buf + cluster_offset), cpy_size);
+            buffer_index += cpy_size;
 
-            for (uint32_t i = 0; i < bytes_per_cluster; i++)
+            if (buffer_index == size)
             {
-                if (current_offset >= offset && current_offset <= offset + size)
-                {
-                    buffer[buffer_index++] = cluster_buf[i];
-                }
-                current_offset++;
+                kfree(cluster_buf);
+                return 0;
             }
         }
-        else
+        else if (offset < byte_offset && (offset + size) >= (byte_offset + bytes_per_cluster))
         {
-            current_offset += bytes_per_cluster;
+            read_cluster(current_cluster, cluster_buf, boot_sector, lbdev);
+            memcpy((void *)((uintptr_t)buffer + buffer_index), (void *)((uintptr_t)cluster_buf), bytes_per_cluster);
+            buffer_index += bytes_per_cluster;
+        }
+        else if ((offset + size) >= byte_offset && (offset + size) < (byte_offset + bytes_per_cluster))
+        {
+            read_cluster(current_cluster, cluster_buf, boot_sector, lbdev);
+            memcpy((void *)((uintptr_t)buffer + buffer_index), cluster_buf, size - buffer_index);
+            kfree(cluster_buf);
+            return 0;
         }
 
-        uint32_t new_fat_section_index = first_fat + current_cluster_num * sizeof(uint32_t);
-        new_fat_section_index = new_fat_section_index - (new_fat_section_index % lbdev->parent->block_size);
-
-        if (fat_section == NULL || (fat_section_index != new_fat_section_index))
-        {
-            if (fat_section == NULL)
-            {
-                fat_section = kmalloc(lbdev->parent->block_size);
-            }
-            fat_section_index = new_fat_section_index;
-
-            block_request_t request;
-            request.bdev = lbdev->parent;
-            request.buffer = (uint8_t *)fat_section;
-            request.is_write = false;
-            request.lba = lbdev->lba_offset + fat_section_index;
-            request.num_blocks = 1;
-
-            kprintf("\nreading: 0x%x\n", lbdev->lba_offset + fat_section_index);
-            kprintf("without offset: 0x%x\n", fat_section_index);
-            kprintf("fat length: 0x%x\n", fat32_private_data->fat_boot->sectors_per_fat_small * 512);
-            submit_read_request(lbdev->parent, &request);
-        }
-
-        current_cluster_num = fat_section[(first_fat + current_cluster_num * sizeof(uint32_t)) % lbdev->parent->block_size];
+        current_cluster = read_fat_entry(current_cluster, boot_sector, lbdev);
+        current_cluster_num++;
     }
 
-    if (fat_section != NULL)
-    {
-        kfree(fat_section);
-    }
     kfree(cluster_buf);
-
-    return EOK;
+    return 0;
 }
 
-uint32_t fat32_write(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer, logical_block_device_t *lbdev, void *private_data)
+uint32_t write_fat32(fs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer)
 {
     (void)node;
     (void)offset;
     (void)size;
     (void)buffer;
-    (void)lbdev;
-    (void)private_data;
-    return EOK;
+    return 0;
 }
 
-fs_node_t *fat32_open(const char *path, logical_block_device_t *lbdev, void *private_data)
-{
-    if (strcmp(path, "/") == 0)
-    {
-        return fs_root;
-    }
-    struct fat32_direntry *fat32_direntry = fat32_direntry_from_path(path, lbdev, private_data);
+fs_node_t *open_fat32(const char *path);
+void close_fat32(fs_node_t *node);
+struct dirent *readdir_fat32(fs_node_t *node, uint32_t index);
+fs_node_t *finddir_fat32(fs_node_t *node, const char *name);
 
-    if (!fat32_direntry)
+fs_node_t *open_fat32(const char *path)
+{
+    struct directory_entry *direntry = direntry_from_path(path, (struct boot_sector *)fs_root->fs_private_data, fs_root->lbdev);
+    if (direntry == 0)
     {
         return NULL;
     }
+    else if ((uintptr_t)direntry == 1)
+    {
+        return fs_root;
+    }
 
-    bool is_dir = (fat32_direntry->attr & ATTR_DIRECTORY) == ATTR_DIRECTORY;
+    bool is_dir = (direntry->attr & ATTR_DIRECTORY) == ATTR_DIRECTORY;
 
-    fs_node_t *fs_node = kmalloc(sizeof(fs_node_t)); // TODO: free fs_node_t
+    fs_node_t *fs_node = kmalloc(sizeof(fs_node_t));
     memset(fs_node, 0x00, sizeof(fs_node_t));
     strcpy(fs_node->path, path);
 
-    fs_node->readdir = &fat32_readdir;
-    fs_node->finddir = &fat32_finddir;
-    fs_node->open = &fat32_open;
-    fs_node->close = &fat32_close;
-    fs_node->read = &fat32_read;
-    fs_node->write = &fat32_write;
-    fs_node->lbdev = lbdev;
-    fs_node->mountfs_private_data = private_data;
+    if (is_dir)
+    {
+        fs_node->readdir = &readdir_fat32;
+        fs_node->finddir = &finddir_fat32;
+    }
+    else
+    {
+        fs_node->read = &read_fat32;
+        fs_node->write = &write_fat32;
+    }
+    fs_node->open = &open_fat32;
+    fs_node->close = &close_fat32;
+
+    fs_node->lbdev = fs_root->lbdev;
+    fs_node->fs_private_data = fs_root->fs_private_data;
+
+    fs_node->creation_time = direntry->creation_time;
+    fs_node->creation_date = direntry->creation_date;
+    fs_node->write_time = direntry->write_time;
+    fs_node->write_date = direntry->write_date;
+    fs_node->last_access_date = direntry->last_access_date;
+
+    fs_node->mask = MASK_READ;
+
+    if (!(direntry->attr & ATTR_READ_ONLY))
+    {
+        fs_node->mask |= MASK_WRITE;
+    }
+
+    if (direntry->attr & ATTR_HIDDEN)
+    {
+        fs_node->mask |= MASK_HIDDEN;
+    }
+
+    if (direntry->attr & ATTR_SYSTEM)
+    {
+        fs_node->mask |= MASK_SYSTEM;
+    }
 
     if (is_dir)
     {
-        fs_node->flags = FS_DIRECTORY;
+        fs_node->flags |= FS_DIRECTORY;
+    }
+    else
+    {
+        fs_node->flags |= FS_FILE;
+        fs_node->filesize = direntry->file_size;
+
+        fs_node->mask |= MASK_EXECUTE;
     }
 
     return fs_node;
 }
 
-void fat32_close(fs_node_t *node, logical_block_device_t *lbdev, void *private_data)
+void close_fat32(fs_node_t *node)
 {
-    (void)lbdev;
-    (void)private_data;
-    if (node == fs_root)
+    if (node != fs_root)
     {
-        return;
+        kfree(node);
     }
-    kfree(node);
 }
 
-struct dirent *fat32_readdir(fs_node_t *node, uint32_t index, logical_block_device_t *lbdev, void *private_data)
+struct dirent dirent_fat32;
+
+struct dirent *readdir_fat32(fs_node_t *node, uint32_t index)
 {
-    uint32_t cluster = first_cluster_from_path(node->path, lbdev, private_data);
-    if (cluster == UINT32_MAX)
+    struct boot_sector *boot_sector = (struct boot_sector *)node->fs_private_data;
+    logical_block_device_t *lbdev = node->lbdev;
+
+    uint32_t cluster = first_cluster_from_path(node->path, boot_sector, lbdev);
+    if (cluster == (uint32_t)-1)
     {
         return NULL;
     }
 
-    struct fat32_direntry *fat32_direntry = find_entry_by_index(index, cluster, lbdev, private_data);
-    if (!fat32_direntry)
+    char filename[256];
+    struct directory_entry *direntry = find_entry_by_index(index, cluster, filename, boot_sector, lbdev);
+    if (!direntry)
     {
         return NULL;
     }
 
-    char filename[20];
-    fat32_nameext_to_name(fat32_direntry->nameext, filename);
+    kfree(direntry);
 
-    struct dirent *dirent = kmalloc(sizeof(struct dirent)); // TODO: free dirent
-    strcpy(dirent->name, filename);
-    dirent->ino = 0;
-    return dirent;
+    memset(&dirent_fat32, 0, sizeof(struct dirent));
+    strcpy(dirent_fat32.name, filename);
+    return &dirent_fat32;
 }
 
-fs_node_t *fat32_finddir(fs_node_t *node, char *name, logical_block_device_t *lbdev, void *private_data)
+fs_node_t *finddir_fat32(fs_node_t *node, const char *name)
 {
+    struct boot_sector *boot_sector = (struct boot_sector *)node->fs_private_data;
+    logical_block_device_t *lbdev = node->lbdev;
+
     char full_path[128];
     strcpy(full_path, node->path);
     if (full_path[strlen(full_path) - 1] != '/')
@@ -621,29 +727,75 @@ fs_node_t *fat32_finddir(fs_node_t *node, char *name, logical_block_device_t *lb
     }
     strcat(full_path, name);
 
-    struct fat32_direntry *fat32_direntry = fat32_direntry_from_path(full_path, lbdev, private_data);
-    if (!fat32_direntry)
+    struct directory_entry *direntry = direntry_from_path(full_path, boot_sector, lbdev);
+    if (!direntry)
     {
         return NULL;
     }
 
-    bool is_dir = (fat32_direntry->attr & ATTR_DIRECTORY) == ATTR_DIRECTORY;
+    bool is_dir = false;
+    if ((uintptr_t)direntry == 1)
+    {
+        is_dir = true;
+    }
+    else if (direntry->attr & ATTR_DIRECTORY)
+    {
+        is_dir = true;
+    }
 
-    fs_node_t *fs_node = kmalloc(sizeof(fs_node_t)); // TODO: free fs_node_t
+    fs_node_t *fs_node = kmalloc(sizeof(fs_node_t)); // remember to call close_fs on the fs_node_t *
     memset(fs_node, 0x00, sizeof(fs_node_t));
     strcpy(fs_node->path, full_path);
-    fs_node->readdir = &fat32_readdir;
-    fs_node->finddir = &fat32_finddir;
-    fs_node->open = &fat32_open;
-    fs_node->close = &fat32_close;
-    fs_node->read = &fat32_read;
-    fs_node->write = &fat32_write;
-    fs_node->lbdev = lbdev;
-    fs_node->mountfs_private_data = private_data;
 
     if (is_dir)
     {
-        fs_node->flags = FS_DIRECTORY;
+        fs_node->readdir = &readdir_fat32;
+        fs_node->finddir = &finddir_fat32;
+    }
+    else
+    {
+        fs_node->read = &read_fat32;
+        fs_node->write = &write_fat32;
+    }
+    fs_node->open = &open_fat32;
+    fs_node->close = &close_fat32;
+
+    fs_node->lbdev = lbdev;
+    fs_node->fs_private_data = (void *)boot_sector;
+
+    fs_node->creation_time = direntry->creation_time;
+    fs_node->creation_date = direntry->creation_date;
+    fs_node->write_time = direntry->write_time;
+    fs_node->write_date = direntry->write_date;
+    fs_node->last_access_date = direntry->last_access_date;
+
+    fs_node->mask = MASK_READ;
+
+    if (!(direntry->attr & ATTR_READ_ONLY))
+    {
+        fs_node->mask |= MASK_WRITE;
+    }
+
+    if (direntry->attr & ATTR_HIDDEN)
+    {
+        fs_node->mask |= MASK_HIDDEN;
+    }
+
+    if (direntry->attr & ATTR_SYSTEM)
+    {
+        fs_node->mask |= MASK_SYSTEM;
+    }
+
+    if (is_dir)
+    {
+        fs_node->flags |= FS_DIRECTORY;
+    }
+    else
+    {
+        fs_node->flags |= FS_FILE;
+        fs_node->filesize = direntry->file_size;
+
+        fs_node->mask |= MASK_EXECUTE;
     }
 
     return fs_node;
@@ -655,151 +807,12 @@ fs_node_t *initialise_fat32(logical_block_device_t *lbdev)
     memset(root_node, 0x00, sizeof(fs_node_t));
     strcpy(root_node->path, "/");
     root_node->flags = FS_DIRECTORY;
-    root_node->readdir = &fat32_readdir;
-    root_node->finddir = &fat32_finddir;
-    root_node->open = &fat32_open;
-    root_node->close = &fat32_close;
+    root_node->readdir = &readdir_fat32;
+    root_node->finddir = &finddir_fat32;
+    root_node->open = &open_fat32;
+    root_node->close = &close_fat32;
     root_node->lbdev = lbdev;
-
-    struct fat32_private_data *private_data = kmalloc(sizeof(struct fat32_private_data));
-
-    uint32_t num_blocks = (lbdev->parent->block_size + (sizeof(struct fat32_boot_sectors) - 1)) / sizeof(struct fat32_boot_sectors);
-    struct fat32_boot_sectors *boot_sectors = kmalloc(num_blocks);
-
-    block_request_t request;
-    request.bdev = lbdev->parent;
-    request.buffer = (uint8_t *)boot_sectors;
-    request.is_write = false;
-    request.lba = lbdev->lba_offset;
-    request.num_blocks = num_blocks;
-
-    private_data->fat_boot = boot_sectors;
-
-    submit_read_request(lbdev->parent, &request);
-    root_node->mountfs_private_data = private_data;
-
-    // configuring filesystem
-
-    if (private_data->fat_boot->root_max_entries != 0)
-    {
-        PANIC_PRINT("fat32 driver invoked on illegal fat32 filesystem. root_max_entries should be 0");
-    }
-
-    uint16_t root_dir_sectors = ((private_data->fat_boot->root_max_entries * 32) + (private_data->fat_boot->bytes_per_sector - 1)) / private_data->fat_boot->bytes_per_sector;
-    uint32_t fat_size, total_sectors, data_sector, num_clusters;
-
-    if (private_data->fat_boot->sectors_per_fat_small != 0)
-    {
-        fat_size = private_data->fat_boot->sectors_per_fat_small;
-    }
-    else
-    {
-        fat_size = private_data->fat_boot->fat32.sectors_per_fat;
-    }
-
-    if (private_data->fat_boot->total_sectors_small != 0)
-    {
-        total_sectors = private_data->fat_boot->total_sectors_small;
-    }
-    else
-    {
-        total_sectors = private_data->fat_boot->total_sectors;
-    }
-
-    data_sector = total_sectors - (private_data->fat_boot->reserved_sectors + (private_data->fat_boot->fat_count * fat_size) + root_dir_sectors);
-    num_clusters = data_sector / private_data->fat_boot->sectors_per_cluster;
-
-    if (num_clusters < 4085)
-    {
-        PANIC_PRINT("fat32 driver invoked on fat12 filesystem");
-    }
-    else if (num_clusters < 65525)
-    {
-        PANIC_PRINT("fat32 driver invoked on fat16 filesystem");
-    }
-
-    // verifying filesystem
-
-    if (((uint8_t *)private_data->fat_boot)[510] != 0x55 &&
-        ((uint8_t *)private_data->fat_boot)[511] != (uint8_t)0xAA)
-    {
-        PANIC_PRINT("fat32 driver invoked on illegal fat32 filesystem. Magic value not present");
-    }
-
-    if (private_data->fat_boot->jmp_boot[0] == 0xEB)
-    {
-        if (private_data->fat_boot->jmp_boot[2] != 0x90)
-        {
-            PANIC_PRINT("fat32 driver invoked on illegal fat32 filesystem. jmp_boot[2] value is wrong");
-        }
-    }
-    else if (private_data->fat_boot->jmp_boot[0] != 0xE9)
-    {
-        PANIC_PRINT("fat32 driver invoked on illegal fat32 filesystem. jmp_boot[0] value is wrong");
-    }
-
-    if (private_data->fat_boot->bytes_per_sector != 512 &&
-        private_data->fat_boot->bytes_per_sector != 1024 &&
-        private_data->fat_boot->bytes_per_sector != 2048 &&
-        private_data->fat_boot->bytes_per_sector != 5096)
-    {
-
-        PANIC_PRINT("fat32 driver invoked on illegal fat32 filesystem. bytes_per_sector is wrong");
-    }
-
-    if (private_data->fat_boot->sectors_per_cluster != 1 &&
-        private_data->fat_boot->sectors_per_cluster % 2 != 0)
-    {
-        PANIC_PRINT("fat32 driver invoked on illegal fat32 filesystem. sectors_per_cluster is wrong");
-    }
-
-    if (private_data->fat_boot->sectors_per_cluster *
-            private_data->fat_boot->bytes_per_sector >
-        32 * 1024)
-    {
-        PANIC_PRINT("fat32 driver invoked on illegal fat32 filesystem. bytes_per_sector * sectors_per_cluster is too large");
-    }
-
-    if (private_data->fat_boot->reserved_sectors == 0)
-    {
-        PANIC_PRINT("fat32 driver invoked on illegal fat32 filesystem. reserved_sectors is zero");
-    }
-
-    if (private_data->fat_boot->fat_count < 2)
-    {
-        PANIC_PRINT("fat32 driver invoked on illegal fat32 filesystem. fat_count is less than two");
-    }
-
-    if (private_data->fat_boot->root_max_entries != 0)
-    {
-        PANIC_PRINT("fat32 driver invoked on illegal fat32 filesystem. root_max_entries must be zero");
-    }
-
-    if (private_data->fat_boot->total_sectors_small != 0)
-    {
-        PANIC_PRINT("fat32 driver invoked on illegal fat32 filesystem. total_sectors_small must be zero");
-    }
-
-    if (private_data->fat_boot->media_info != 0xF0 &&
-        private_data->fat_boot->media_info < 0xF8)
-    {
-        PANIC_PRINT("fat32 driver invoked on illegal fat32 filesystem. Wrong media info");
-    }
-
-    if (private_data->fat_boot->sectors_per_fat_small != 0)
-    {
-        PANIC_PRINT("fat32 driver invoked on illegal fat32 filesystem. Sectors per fat small must be zero");
-    }
-
-    if (private_data->fat_boot->total_sectors == 0)
-    {
-        PANIC_PRINT("fat32 driver invoked on illegal fat32 filesystem. total_sectors must be non-zero");
-    }
-
-    private_data->root_cluster = 0xFFFFFFF & private_data->fat_boot->fat32.root_cluster;
-
-    uint32_t fat_start = lbdev->lba_offset + private_data->fat_boot->reserved_sectors;
-    private_data->data_start = fat_start + private_data->fat_boot->fat32.sectors_per_fat * private_data->fat_boot->fat_count;
+    root_node->fs_private_data = (void *)scan_fat(lbdev->parent->block_size, lbdev);
 
     return root_node;
 }

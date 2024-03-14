@@ -21,6 +21,7 @@ char *strcat(char *dest, const char *src);
 char *strpbrk(char *s1, const char *s2);
 char *strtok(char *s, const char *delim);
 char *strcpy(char *dest, const char *src);
+char *strncpy(char *dest, const char *src, uint32_t n);
 char *strtoupper(char *str);
 
 #endif

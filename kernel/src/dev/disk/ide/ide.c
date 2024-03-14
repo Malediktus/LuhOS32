@@ -85,23 +85,23 @@
 
 typedef struct
 {
-  uint16_t flags;
-  uint16_t unused1[9];
-  char serial[20];
-  uint16_t unused2[3];
-  char firmware[8];
-  char model[40];
-  uint16_t sectors_per_int;
-  uint16_t unused3;
-  uint16_t capabilities[2];
-  uint16_t unused4[2];
-  uint16_t valid_ext_data;
-  uint16_t unused5[5];
-  uint16_t size_of_rw_mult;
-  uint32_t sectors_28;
-  uint16_t unused6[38];
-  uint64_t sectors_48;
-  uint16_t unused7[152];
+    uint16_t flags;
+    uint16_t unused1[9];
+    char serial[20];
+    uint16_t unused2[3];
+    char firmware[8];
+    char model[40];
+    uint16_t sectors_per_int;
+    uint16_t unused3;
+    uint16_t capabilities[2];
+    uint16_t unused4[2];
+    uint16_t valid_ext_data;
+    uint16_t unused5[5];
+    uint16_t size_of_rw_mult;
+    uint32_t sectors_28;
+    uint16_t unused6[38];
+    uint64_t sectors_48;
+    uint16_t unused7[152];
 } __attribute__((packed)) ata_identify_t;
 
 #define IDE_DEVICE_FLAG_MASTER 1 << 0
@@ -109,8 +109,8 @@ typedef struct
 
 typedef struct
 {
-  uint16_t bus;
-  uint8_t flags;
+    uint16_t bus;
+    uint8_t flags;
 } ide_device_private_data_t;
 
 static uint16_t ide_buses[] = {0x1F0,
@@ -120,192 +120,192 @@ static uint16_t ide_buses[] = {0x1F0,
 
 static void ata_io_wait(uint16_t bus)
 {
-  port_byte_in(bus + ATA_REG_ALTSTATUS);
-  port_byte_in(bus + ATA_REG_ALTSTATUS);
-  port_byte_in(bus + ATA_REG_ALTSTATUS);
-  port_byte_in(bus + ATA_REG_ALTSTATUS);
+    port_byte_in(bus + ATA_REG_ALTSTATUS);
+    port_byte_in(bus + ATA_REG_ALTSTATUS);
+    port_byte_in(bus + ATA_REG_ALTSTATUS);
+    port_byte_in(bus + ATA_REG_ALTSTATUS);
 }
 
 static void ata_select(uint16_t bus, bool master)
 {
-  port_byte_out(bus + ATA_REG_HDDEVSEL, master ? 0xA0 : 0xB0);
+    port_byte_out(bus + ATA_REG_HDDEVSEL, master ? 0xA0 : 0xB0);
 }
 
 static void ata_wait_ready(uint16_t bus)
 {
-  while (port_byte_in(bus + ATA_REG_STATUS) & ATA_SR_BSY)
-    ;
+    while (port_byte_in(bus + ATA_REG_STATUS) & ATA_SR_BSY)
+        ;
 }
 
 static int ata_wait(uint16_t bus, int advanced)
 {
-  uint8_t status = 0;
+    uint8_t status = 0;
 
-  ata_io_wait(bus);
+    ata_io_wait(bus);
 
-  while ((status = port_byte_in(bus + ATA_REG_STATUS)) & ATA_SR_BSY)
-    ;
+    while ((status = port_byte_in(bus + ATA_REG_STATUS)) & ATA_SR_BSY)
+        ;
 
-  if (advanced)
-  {
-    status = port_byte_in(bus + ATA_REG_STATUS);
-    if (status & ATA_SR_ERR)
+    if (advanced)
     {
-      return 1;
+        status = port_byte_in(bus + ATA_REG_STATUS);
+        if (status & ATA_SR_ERR)
+        {
+            return 1;
+        }
+        if (status & ATA_SR_DF)
+        {
+            return 1;
+        }
+        if (!(status & ATA_SR_DRQ))
+        {
+            return 1;
+        }
     }
-    if (status & ATA_SR_DF)
-    {
-      return 1;
-    }
-    if (!(status & ATA_SR_DRQ))
-    {
-      return 1;
-    }
-  }
 
-  return 0;
+    return 0;
 }
 
 static uint32_t ide_device_identify(uint16_t bus, uint8_t flags)
 {
-  port_byte_out(bus + 1, 1);
-  port_byte_out(bus + 0x306, 0);
+    port_byte_out(bus + 1, 1);
+    port_byte_out(bus + 0x306, 0);
 
-  ata_select(bus + ATA_REG_HDDEVSEL, flags & IDE_DEVICE_FLAG_MASTER);
-  ata_io_wait(bus);
+    ata_select(bus + ATA_REG_HDDEVSEL, flags & IDE_DEVICE_FLAG_MASTER);
+    ata_io_wait(bus);
 
-  port_byte_out(bus + ATA_REG_COMMAND, ATA_CMD_IDENTIFY);
+    port_byte_out(bus + ATA_REG_COMMAND, ATA_CMD_IDENTIFY);
 
-  ata_io_wait(bus);
+    ata_io_wait(bus);
 
-  int status = port_byte_in(bus + ATA_REG_COMMAND);
-  if (status == 0x00) // Device not present
-  {
-    return 0;
-  }
+    int status = port_byte_in(bus + ATA_REG_COMMAND);
+    if (status == 0x00) // Device not present
+    {
+        return 0;
+    }
 
-  ata_wait_ready(bus);
+    ata_wait_ready(bus);
 
-  ata_identify_t device;
-  uint16_t *buf = (uint16_t *)&device;
+    ata_identify_t device;
+    uint16_t *buf = (uint16_t *)&device;
 
-  for (int i = 0; i < 256; ++i)
-  {
-    buf[i] = port_word_in(bus);
-  }
+    for (int i = 0; i < 256; ++i)
+    {
+        buf[i] = port_word_in(bus);
+    }
 
-  port_byte_out(bus + ATA_REG_CONTROL, 0x02);
+    port_byte_out(bus + ATA_REG_CONTROL, 0x02);
 
-  return buf[60] | (buf[61] << 16);
+    return buf[60] | (buf[61] << 16);
 }
 
 uint32_t ide_driver_init()
 {
-  return EOK;
+    return EOK;
 }
 
 uint32_t ide_driver_scan_disks()
 {
-  for (uint8_t i = 0; i < 4; i++)
-  {
-    uint16_t bus = ide_buses[i];
-    uint8_t flags = 0x00;
-    if (i % 2)
+    for (uint8_t i = 0; i < 4; i++)
     {
-      flags = IDE_DEVICE_FLAG_MASTER;
-      // TODO: Fix master devices
-      continue;
+        uint16_t bus = ide_buses[i];
+        uint8_t flags = 0x00;
+        if (i % 2)
+        {
+            flags = IDE_DEVICE_FLAG_MASTER;
+            // TODO: Fix master devices
+            continue;
+        }
+
+        uint32_t num_sectors = ide_device_identify(bus, flags);
+
+        if (num_sectors == 0)
+        {
+            continue;
+        }
+
+        ide_device_private_data_t *private_data = kmalloc(sizeof(ide_device_private_data_t));
+        private_data->bus = bus;
+        private_data->flags = flags | IDE_DEVICE_FLAG_PRESENT;
+
+        block_device_t *bdev = kmalloc(sizeof(block_device_t));
+        bdev->block_size = 512;
+        bdev->total_blocks = num_sectors;
+
+        bdev->implementation.read_block = ide_read_block;
+        bdev->implementation.write_block = ide_write_block;
+        bdev->implementation.private_data = private_data;
+
+        register_block_device(bdev);
     }
 
-    uint32_t num_sectors = ide_device_identify(bus, flags);
-
-    if (num_sectors == 0)
-    {
-      continue;
-    }
-
-    ide_device_private_data_t *private_data = kmalloc(sizeof(ide_device_private_data_t));
-    private_data->bus = bus;
-    private_data->flags = flags | IDE_DEVICE_FLAG_PRESENT;
-
-    block_device_t *bdev = kmalloc(sizeof(block_device_t));
-    bdev->block_size = 512;
-    bdev->total_blocks = num_sectors;
-
-    bdev->implementation.read_block = ide_read_block;
-    bdev->implementation.write_block = ide_write_block;
-    bdev->implementation.private_data = private_data;
-
-    register_block_device(bdev);
-  }
-
-  return EOK;
+    return EOK;
 }
 
 uint32_t ide_write_block(block_device_t *bdev, uint32_t lba, uint8_t *buf)
 {
-  ide_device_private_data_t *private_data = bdev->implementation.private_data;
-  bool master = !(private_data->flags & IDE_DEVICE_FLAG_MASTER);
-  uint16_t bus = private_data->bus;
+    ide_device_private_data_t *private_data = bdev->implementation.private_data;
+    bool master = !(private_data->flags & IDE_DEVICE_FLAG_MASTER);
+    uint16_t bus = private_data->bus;
 
-  port_byte_out(bus + ATA_REG_CONTROL, 0x02);
+    port_byte_out(bus + ATA_REG_CONTROL, 0x02);
 
-  ata_wait_ready(bus);
+    ata_wait_ready(bus);
 
-  port_byte_out(bus + ATA_REG_HDDEVSEL, (master ? 0xE0 : 0xF0) | ((lba & 0x0f000000) >> 24));
-  ata_wait(bus, 0);
-  port_byte_out(bus + ATA_REG_FEATURES, 0x00);
-  port_byte_out(bus + ATA_REG_SECCOUNT0, 0x01);
-  port_byte_out(bus + ATA_REG_LBA0, (lba & 0x000000ff) >> 0);
-  port_byte_out(bus + ATA_REG_LBA1, (lba & 0x0000ff00) >> 8);
-  port_byte_out(bus + ATA_REG_LBA2, (lba & 0x00ff0000) >> 16);
-  port_byte_out(bus + ATA_REG_COMMAND, ATA_CMD_WRITE_PIO);
-  ata_wait(bus, 0);
+    port_byte_out(bus + ATA_REG_HDDEVSEL, (master ? 0xE0 : 0xF0) | ((lba & 0x0f000000) >> 24));
+    ata_wait(bus, 0);
+    port_byte_out(bus + ATA_REG_FEATURES, 0x00);
+    port_byte_out(bus + ATA_REG_SECCOUNT0, 0x01);
+    port_byte_out(bus + ATA_REG_LBA0, (lba & 0x000000ff) >> 0);
+    port_byte_out(bus + ATA_REG_LBA1, (lba & 0x0000ff00) >> 8);
+    port_byte_out(bus + ATA_REG_LBA2, (lba & 0x00ff0000) >> 16);
+    port_byte_out(bus + ATA_REG_COMMAND, ATA_CMD_WRITE_PIO);
+    ata_wait(bus, 0);
 
-  uint16_t *write_buf = (uint16_t *)buf;
-  for (uint32_t i = 0; i < 256; i++)
-  {
-    uint16_t data = write_buf[i];
-    port_word_out(bus, data);
-  }
+    uint16_t *write_buf = (uint16_t *)buf;
+    for (uint32_t i = 0; i < 256; i++)
+    {
+        uint16_t data = write_buf[i];
+        port_word_out(bus, data);
+    }
 
-  port_byte_out(bus + 0x07, ATA_CMD_CACHE_FLUSH);
-  ata_wait(bus, 0);
+    port_byte_out(bus + 0x07, ATA_CMD_CACHE_FLUSH);
+    ata_wait(bus, 0);
 
-  return EOK;
+    return EOK;
 }
 
 uint32_t ide_read_block(block_device_t *bdev, uint32_t lba, uint8_t *buf)
 {
-  ide_device_private_data_t *private_data = bdev->implementation.private_data;
-  bool master = !(private_data->flags & IDE_DEVICE_FLAG_MASTER);
-  uint16_t bus = private_data->bus;
+    ide_device_private_data_t *private_data = bdev->implementation.private_data;
+    bool master = !(private_data->flags & IDE_DEVICE_FLAG_MASTER);
+    uint16_t bus = private_data->bus;
 
-  port_byte_out(bus + ATA_REG_CONTROL, 0x02);
+    port_byte_out(bus + ATA_REG_CONTROL, 0x02);
 
-  ata_wait_ready(bus);
+    ata_wait_ready(bus);
 
-  port_byte_out(bus + ATA_REG_HDDEVSEL, (master ? 0xE0 : 0xF0) | ((lba & 0x0f000000) >> 24));
-  port_byte_out(bus + ATA_REG_FEATURES, 0x00);
-  port_byte_out(bus + ATA_REG_SECCOUNT0, 1);
-  port_byte_out(bus + ATA_REG_LBA0, (lba & 0x000000ff) >> 0);
-  port_byte_out(bus + ATA_REG_LBA1, (lba & 0x0000ff00) >> 8);
-  port_byte_out(bus + ATA_REG_LBA2, (lba & 0x00ff0000) >> 16);
-  port_byte_out(bus + ATA_REG_COMMAND, ATA_CMD_READ_PIO);
+    port_byte_out(bus + ATA_REG_HDDEVSEL, (master ? 0xE0 : 0xF0) | ((lba & 0x0f000000) >> 24));
+    port_byte_out(bus + ATA_REG_FEATURES, 0x00);
+    port_byte_out(bus + ATA_REG_SECCOUNT0, 1);
+    port_byte_out(bus + ATA_REG_LBA0, (lba & 0x000000ff) >> 0);
+    port_byte_out(bus + ATA_REG_LBA1, (lba & 0x0000ff00) >> 8);
+    port_byte_out(bus + ATA_REG_LBA2, (lba & 0x00ff0000) >> 16);
+    port_byte_out(bus + ATA_REG_COMMAND, ATA_CMD_READ_PIO);
 
-  if (ata_wait(bus, 1))
-  {
-    PANIC_PRINT("error during ATA read");
-    return EHRDWRE;
-  }
+    if (ata_wait(bus, 1))
+    {
+        PANIC_PRINT("error during ATA read");
+        return EHRDWRE;
+    }
 
-  uint16_t *read_buf = (uint16_t *)buf;
-  for (uint32_t i = 0; i < 256; i++)
-  {
-    read_buf[i] = port_word_in(bus);
-  }
+    uint16_t *read_buf = (uint16_t *)buf;
+    for (uint32_t i = 0; i < 256; i++)
+    {
+        read_buf[i] = port_word_in(bus);
+    }
 
-  ata_wait(bus, 0);
+    ata_wait(bus, 0);
 
-  return EOK;
+    return EOK;
 }

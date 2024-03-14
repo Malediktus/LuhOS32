@@ -49,7 +49,7 @@ uint8_t key_code_to_ascii(uint32_t key)
         return ' ';
     if (key == 0xE)
         return '\r';
-    if (key == POINT_RELEASED)
+    if (key == POINT_PRESSED)
         return '.';
     if (key == SLASH_RELEASED)
         return '/';
@@ -70,4 +70,14 @@ uint8_t key_code_to_ascii(uint32_t key)
         return _yxcvbnm[key - 0x2C];
     }
     return 0;
+}
+
+char utf16_to_ascii(const uint16_t c)
+{
+    if (c <= 0x7F)
+    {
+        return (char)(c & 0x7F);
+    }
+
+    return '?';
 }

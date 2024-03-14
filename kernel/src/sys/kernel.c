@@ -182,7 +182,7 @@ void kernel_main(unsigned long magic, unsigned long addr)
         PANIC_PRINT("no logical block device found");
     }
 
-    kprintf("reading initrd fs...\n");
+    /*kprintf("reading initrd fs...\n");
     fs_root = initialise_initrd(initrd_start);
     int i = 0;
     struct dirent *node = 0;
@@ -197,8 +197,8 @@ void kernel_main(unsigned long magic, unsigned long addr)
         else
         {
             kprintf(" (f)\n");
-            char *buf = kmalloc(fsnode->size);
-            read_fs(fsnode, 0, fsnode->size, (uint8_t *)buf);
+            char *buf = kmalloc(fsnode->filesize);
+            read_fs(fsnode, 0, fsnode->filesize, (uint8_t *)buf);
             kprintf("%s\n", buf);
             kfree(buf);
         }
@@ -208,14 +208,13 @@ void kernel_main(unsigned long magic, unsigned long addr)
         i++;
     }
 
-    free_initrd();
+    free_initrd();*/
 
     fs_root = initialise_fat32(lbdevs[0]);
 
     pci_instantiate_drivers();
     kprintf("\033[40m  \033[41m  \033[42m  \033[43m  \033[44m  \033[45m  \033[46m  \033[47m  \033[40;1m  \033[41;1m  \033[42;1m  \033[43;1m  \033[44;1m  \033[45;1m  \033[46;1m  \033[47;1m  \033[0m\n");
 
-    // TODO: I think there are many memory leaks all across the code
     run_kernel_shell();
 
     while (true)

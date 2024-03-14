@@ -44,7 +44,6 @@ uint32_t keyboard_ps2_get_event(input_device_t *idev, input_device_event_t *even
         keycache[i] = keycache[i + 1];
     }
 
-out:
     event->type = INPUT_EVENT_KEY;
     event->data[0] = (uint64_t)c;
 

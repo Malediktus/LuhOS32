@@ -77,7 +77,7 @@ void process_command(char *line, uint32_t len)
 
     if (strcmp(command_info.command, "help") == 0)
     {
-        kprintf("list of commands:\n - help: prints this message\n - sysinfo: gives you info about the kernel version\n - ls: list files in directory\n - page: dynamicly allocates a page and prints it\n - dumpdisks: prints information about scanned block devices\n - echo: echoes arguments\n");
+        kprintf("list of commands:\n - help: prints this message\n - sysinfo: gives you info about the kernel version\n - ls: list files in directory\n - print: prints the content of the specified file\n - page: dynamicly allocates a page and prints it\n - dumpdisks: prints information about scanned block devices\n - echo: echoes arguments\n");
     }
     else if (strcmp(command_info.command, "sysinfo") == 0)
     {
@@ -85,6 +85,12 @@ void process_command(char *line, uint32_t len)
     }
     else if (strcmp(command_info.command, "ls") == 0)
     {
+        if (command_info.num_arguments < 2)
+        {
+            kprintf("error: no directory specified\n");
+            free_command_info(&command_info);
+            return;
+        }
         const char *path = command_info.arguments[1];
         fs_node_t *path_node = open_fs(path);
         if (!path_node)
@@ -118,10 +124,37 @@ void process_command(char *line, uint32_t len)
             {
                 kprintf(" (d)");
             }
+            close_fs(fsnode);
             i++;
         }
 
         kprintf("\n");
+        close_fs(path_node);
+    }
+    else if (strcmp(command_info.command, "print") == 0)
+    {
+        if (command_info.num_arguments < 2)
+        {
+            kprintf("error: no file specified\n");
+            free_command_info(&command_info);
+            return;
+        }
+        const char *path = command_info.arguments[1];
+
+        fs_node_t *path_node = open_fs(path);
+        if (!path_node)
+        {
+            kprintf("error: file or directory does not exist\n");
+            free_command_info(&command_info);
+            return;
+        }
+
+        char *buf = kmalloc(path_node->filesize);
+        read_fs(path_node, 0, path_node->filesize, (uint8_t *)buf);
+        buf[path_node->filesize] = '\0';
+        kprintf("%s\n", buf);
+
+        kfree(buf);
         close_fs(path_node);
     }
     else if (strcmp(command_info.command, "page") == 0)

@@ -149,7 +149,7 @@ void process_command(char *line, uint32_t len)
             return;
         }
 
-        char *buf = kmalloc(path_node->filesize);
+        char *buf = kmalloc(path_node->filesize + 1);
         read_fs(path_node, 0, path_node->filesize, (uint8_t *)buf);
         buf[path_node->filesize] = '\0';
         kprintf("%s\n", buf);

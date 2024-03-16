@@ -29,6 +29,8 @@ extern uint32_t _kernel_end;
 
 static uint32_t *kernel_page_directory = 0;
 
+struct tss tss;
+
 void pci_instantiate_drivers(void); // TODO: remove
 
 void kernel_main(unsigned long magic, unsigned long addr)
@@ -101,13 +103,23 @@ void kernel_main(unsigned long magic, unsigned long addr)
     init_tty(&ega_device);
     clear_tty();
 
-    result = segmentation_init();
+    result = segmentation_init(&tss);
     if (result != EOK)
     {
         PANIC_CODE(kprintf("failed to initialize segmentation. error: %s\n", string_error(result)));
     }
 
     kprintf("kernel booted from %s\n", bootloader_name);
+
+    uint32_t esp_value;
+    __asm__ volatile("movl %%esp, %0" : "=r"(esp_value)); // TODO: i dont know if this works
+    kprintf("esp: 0x%x\n", esp_value);
+
+    memset(&tss, 0, sizeof(struct tss));
+    tss.esp0 = esp_value;
+    tss.ss0 = KERNEL_DATA_SELECTOR;
+
+    tss_load(0x28);
 
     result = interrupts_init();
     if (result != EOK)

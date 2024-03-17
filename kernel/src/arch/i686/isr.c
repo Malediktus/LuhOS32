@@ -158,14 +158,14 @@ static const char *exception_messages[] = {
     "reserved",
     "reserved"};
 
-void isr_handler(registers_t r)
+void isr_handler(int_registers_t r)
 {
     PANIC_CODE(kprintf("received interrupt: %i\n%s exception\nerror code: %i\n", r.int_no, exception_messages[r.int_no], r.err_code));
 }
 
 static isr_t interrupt_handlers[256];
 
-void irq_handler(registers_t r)
+void irq_handler(int_registers_t r)
 {
     if (interrupt_handlers[r.int_no] != 0)
     {

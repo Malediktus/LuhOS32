@@ -7,7 +7,7 @@
 uint8_t *keycache = 0;
 uint16_t key_loc = 0;
 
-void keyboard_irq(registers_t)
+void keyboard_irq(int_registers_t)
 {
     if (key_loc >= 255)
     {

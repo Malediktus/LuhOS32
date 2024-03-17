@@ -12,21 +12,19 @@ task_t *task_current()
     return current_task;
 }
 
-task_t *task_new()
+task_t *task_new(struct _process *process)
 {
-    uint32_t res = EOK;
     task_t *task = kmalloc(sizeof(task_t));
     if (!task)
     {
-        res = ENOMEM;
-        goto out;
+        return NULL;
     }
 
-    res = task_init(task);
+    uint32_t res = task_init(task, process);
     if (res != EOK)
     {
         kfree(task);
-        goto out;
+        return NULL;
     }
 
     if (task_head == NULL)
@@ -41,8 +39,7 @@ task_t *task_new()
         task_tail = task;
     }
 
-out:
-    return res;
+    return task;
 }
 
 task_t *task_get_next()
@@ -85,10 +82,35 @@ void task_free(task_t *task)
     kfree(task);
 }
 
-uint32_t task_init(task_t *task)
+uint32_t task_switch(task_t *task)
+{
+    current_task = task;
+    paging_switch_directory(task->page_directory);
+    return EOK;
+}
+
+uint32_t task_page()
+{
+    user_registers();
+    task_switch(current_task);
+    return EOK;
+}
+
+void task_run_first_task()
+{
+    if (!current_task)
+    {
+        PANIC_PRINT("task_run_first_task: current_task is NULL");
+    }
+
+    task_switch(task_head);
+    task_return(&task_head->registers);
+}
+
+uint32_t task_init(task_t *task, struct _process *process)
 {
     memset(task, 0, sizeof(task_t));
-    task->page_directory = page_directory_create(PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL);
+    task->page_directory = page_directory_create(PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL); // TODO: remove flags
     if (!task->page_directory)
     {
         return ENOMEM;
@@ -97,6 +119,8 @@ uint32_t task_init(task_t *task)
     task->registers.ip = KERNEL_TASK_VADDR;
     task->registers.ss = USER_DATA_SELECTOR;
     task->registers.esp = KERNEL_TASK_STACK_VADDR;
+
+    task->process = process;
 
     return EOK;
 }

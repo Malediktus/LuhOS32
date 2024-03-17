@@ -70,7 +70,7 @@ uint32_t paging_set(uint32_t *directory, void *virt, uint32_t val)
 {
     if (!paging_is_aligned(virt))
     {
-        return -EINVARG;
+        return EINVARG;
     }
 
     uint32_t directory_index = 0;
@@ -90,14 +90,63 @@ uint32_t paging_set(uint32_t *directory, void *virt, uint32_t val)
     return EOK;
 }
 
+uint32_t paging_map_range(uint32_t *directory, void *virt, void *phys, uint32_t count, uint8_t flags)
+{
+    uint32_t res = EOK;
+    for (uint32_t i = 0; i < count; i++)
+    {
+        res = paging_map(directory, virt, phys, flags);
+        if (res != EOK)
+        {
+            break;
+        }
+
+        virt += PAGE_SIZE;
+        phys += PAGE_SIZE;
+    }
+
+    return res;
+}
+
+uint32_t paging_map_to(uint32_t *directory, void *virt, void *phys, void *phys_end, uint8_t flags)
+{
+    uint32_t res = EOK;
+    if (!paging_is_aligned(virt) || !paging_is_aligned(phys) || !paging_is_aligned(phys_end))
+    {
+        res = EINVARG;
+        goto out;
+    }
+
+    if ((uintptr_t)phys_end < (uintptr_t)phys)
+    {
+        res = EINVARG;
+        goto out;
+    }
+
+    uint32_t total_bytes = phys_end - phys;
+    uint32_t total_pages = total_bytes / PAGE_SIZE;
+    res = paging_map_range(directory, virt, phys, total_pages, flags);
+
+out:
+    return res;
+}
+
 uint32_t paging_map(uint32_t *directory, void *virt, void *phys, uint8_t flags)
 {
     if (!paging_is_aligned(virt) || !paging_is_aligned(phys))
     {
-        return -EINVARG;
+        return EINVARG;
     }
 
-    paging_set(directory, virt, (uint32_t)phys | flags);
+    return paging_set(directory, virt, (uint32_t)phys | flags);
+}
 
-    return EOK;
+void *paging_align_address(void *ptr)
+{
+    if (paging_is_aligned(ptr))
+    {
+        return ptr;
+    }
+
+    return (void *)((uintptr_t)ptr + PAGE_SIZE - ((uintptr_t)ptr % PAGE_SIZE));
 }

@@ -25,10 +25,13 @@ typedef struct
     uint32_t ss;
 } __attribute__((packed)) task_registers_t;
 
+struct _process;
 typedef struct _task
 {
     uint32_t *page_directory;
     task_registers_t registers;
+
+    struct _process *process;
 
     // double linked list
     struct _task *next;
@@ -38,8 +41,16 @@ typedef struct _task
 task_t *task_current();
 task_t *task_get_next();
 
-task_t *task_new();
+task_t *task_new(struct _process *process);
 void task_free(task_t *task);
-uint32_t task_init(task_t *task);
+uint32_t task_init(task_t *task, struct _process *process);
+
+uint32_t task_switch(task_t *task);
+uint32_t task_page();
+void task_run_first_task();
+
+void task_return(task_registers_t *regs);
+void restore_gp_registers(task_registers_t *regs);
+void user_registers();
 
 #endif

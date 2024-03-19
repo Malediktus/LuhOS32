@@ -36,7 +36,7 @@ static uint32_t process_load_binary(const char *path, process_t *process)
         return res;
     }
 
-    void *program_data_ptr = kmalloc(file->filesize);
+    void *program_data_ptr = kmalloc_aligned(PAGE_SIZE, file->filesize);
     if (!program_data_ptr)
     {
         res = ENOMEM;
@@ -64,15 +64,13 @@ static uint32_t process_load_data(const char *path, process_t *process)
     return res;
 }
 
+extern uint32_t *kernel_page_directory;
+
 uint32_t process_map_binary(process_t *process)
 {
     uint32_t res = EOK;
-    res = paging_map_to(process->task->page_directory, (void *)KERNEL_TASK_VADDR, process->data, paging_align_address(process->data + process->size), PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL | PAGING_IS_WRITEABLE);
-    if (res != EOK)
-    {
-        return res;
-    }
-
+    void *data_phys_addr = paging_get_phys_address(kernel_page_directory, process->data);
+    res = paging_map_to(process->task->page_directory, (void *)KERNEL_TASK_VADDR, data_phys_addr, paging_align_address(data_phys_addr + process->size), PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL | PAGING_IS_WRITEABLE);
     return res;
 }
 
@@ -80,6 +78,14 @@ uint32_t process_map_memory(process_t *process)
 {
     uint32_t res = EOK;
     res = process_map_binary(process);
+    if (res != EOK)
+    {
+        goto out;
+    }
+
+    // res = paging_map_to(process->task->page_directory, (void *)(KERNEL_TASK_STACK_VADDR - KERNEL_TASK_STACK_SIZE), process->stack, paging_align_address(process->stack + KERNEL_TASK_STACK_SIZE), PAGING_IS_PRESENT | PAGING_ACCESS_FROM_ALL | PAGING_IS_WRITEABLE);
+
+out:
     return res;
 }
 
@@ -90,7 +96,7 @@ uint32_t process_load_for_slot(const char *path, process_t **process, uint32_t p
     process_t *_process = NULL;
     void *program_stack_ptr = NULL;
 
-    if (!process_get(process_slot))
+    if (process_get(process_slot) != NULL)
     {
         res = EINVARG;
         goto out;
@@ -111,7 +117,7 @@ uint32_t process_load_for_slot(const char *path, process_t **process, uint32_t p
         goto out;
     }
 
-    program_stack_ptr = kmalloc(KERNEL_TASK_STACK_SIZE);
+    program_stack_ptr = kmalloc_aligned(PAGE_SIZE, KERNEL_TASK_STACK_SIZE);
     if (!program_stack_ptr)
     {
         // TODO: memory leak... unload process

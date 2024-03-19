@@ -141,6 +141,42 @@ uint32_t paging_map(uint32_t *directory, void *virt, void *phys, uint8_t flags)
     return paging_set(directory, virt, (uint32_t)phys | flags);
 }
 
+void *paging_get_phys_address(uint32_t *directory, void *virt)
+{
+    if (!paging_is_aligned(virt))
+    {
+        return NULL; // Invalid virtual address, not page aligned
+    }
+
+    uint32_t directory_index = 0;
+    uint32_t table_index = 0;
+
+    uint32_t res = paging_get_indices(virt, &directory_index, &table_index);
+    if (res != EOK)
+    {
+        return NULL; // Error getting indices
+    }
+
+    uint32_t entry = directory[directory_index];
+    if (!(entry & PAGING_IS_PRESENT))
+    {
+        return NULL; // Page table not present
+    }
+
+    uint32_t *table = (uint32_t *)(entry & 0xFFFFF000);
+    uint32_t page_entry = table[table_index];
+    if (!(page_entry & PAGING_IS_PRESENT))
+    {
+        return NULL; // Page not present
+    }
+
+    uint32_t page_address = page_entry & 0xFFFFF000;
+    uint32_t offset = (uint32_t)virt % PAGE_SIZE;
+    uint32_t phys_address = page_address + offset;
+
+    return (void *)phys_address;
+}
+
 void *paging_align_address(void *ptr)
 {
     if (paging_is_aligned(ptr))

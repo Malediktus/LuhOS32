@@ -39,12 +39,12 @@ uint32_t segmentation_init(struct tss *tss)
     gdt_ptr.limit = (sizeof(gdt_entry_t) * 6) - 1;
     gdt_ptr.base = (uint32_t)&gdt_entries;
 
-    gdt_set_gate(0, 0, 0, 0, 0);                                 // Null segment
-    gdt_set_gate(1, 0, 0xFFFFFFFF, 0x9A, 0xCF);                  // Code segment
-    gdt_set_gate(2, 0, 0xFFFFFFFF, 0x92, 0xCF);                  // Data segment
-    gdt_set_gate(3, 0, 0xFFFFFFFF, 0xFA, 0xCF);                  // User mode code segment
-    gdt_set_gate(4, 0, 0xFFFFFFFF, 0xF2, 0xCF);                  // User mode data segment
-    gdt_set_gate(5, (uint32_t)tss, sizeof(struct tss), 0x89, 0); // TSS
+    gdt_set_gate(0, 0, 0, 0, 0);                                    // Null segment
+    gdt_set_gate(1, 0, 0xFFFFFFFF, 0x9A, 0xC0);                     // Code segment
+    gdt_set_gate(2, 0, 0xFFFFFFFF, 0x92, 0xC0);                     // Data segment
+    gdt_set_gate(3, 0, 0xFFFFFFFF, 0xF8, 0xC0);                     // User mode code segment
+    gdt_set_gate(4, 0, 0xFFFFFFFF, 0xF2, 0xC0);                     // User mode data segment
+    gdt_set_gate(5, (uint32_t)tss, sizeof(struct tss), 0xE9, 0xC0); // TSS
 
     gdt_flush((uint32_t)&gdt_ptr);
 

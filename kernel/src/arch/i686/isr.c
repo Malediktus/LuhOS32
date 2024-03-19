@@ -158,15 +158,29 @@ static const char *exception_messages[] = {
     "reserved",
     "reserved"};
 
+extern uint32_t *kernel_page_directory;
+
 void isr_handler(int_registers_t r)
 {
-    PANIC_CODE(kprintf("received interrupt: %i\n%s exception\nerror code: %i\n", r.int_no, exception_messages[r.int_no], r.err_code));
+    paging_switch_directory(kernel_page_directory);
+    PANIC_CODE(kprintf("received interrupt: %i\n%s exception\nerror code: %i\nEIP: 0x%x\nESP: 0x%x\nSS: 0x%x\nCS: 0x%x\nEFLAGS: 0x%x\nDS: 0x%x",
+                       r.int_no,
+                       exception_messages[r.int_no],
+                       r.err_code,
+                       r.eip,
+                       r.esp,
+                       r.ss,
+                       r.cs,
+                       r.eflags,
+                       r.ds));
 }
 
 static isr_t interrupt_handlers[256];
 
 void irq_handler(int_registers_t r)
 {
+    paging_switch_directory(kernel_page_directory);
+
     if (interrupt_handlers[r.int_no] != 0)
     {
         isr_t handler = interrupt_handlers[r.int_no];

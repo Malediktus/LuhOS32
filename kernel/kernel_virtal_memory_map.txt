@@ -1,6 +1,6 @@
 0x00000000 page allocator bitmap
 ..
 ?????????? (how much it takes)
-0xFFFC0000 kernel internal memory allocator
+0xFFFC0000 kernel internal memory allocator // IMPORTANT: this memory can not be used in user space as well
 ..
 0xFFFG0000

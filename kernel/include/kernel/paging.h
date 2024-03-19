@@ -18,6 +18,7 @@ void paging_switch_directory(uint32_t *directory);
 uint32_t paging_map_range(uint32_t *directory, void *virt, void *phys, uint32_t count, uint8_t flags);
 uint32_t paging_map_to(uint32_t *directory, void *virt, void *phys, void *phys_end, uint8_t flags);
 uint32_t paging_map(uint32_t *directory, void *virt, void *phys, uint8_t flags);
+void *paging_get_phys_address(uint32_t *directory, void *virt);
 
 void *paging_align_address(void *ptr);
 

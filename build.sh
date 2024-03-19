@@ -16,5 +16,11 @@ pushd tools/initrd_gen;
   ./initrd_gen test.txt test.txt;
 popd
 
+pushd apps/blank
+  make
+popd
+
+mkdir -p sysroot/bin/
+
 cp -f tools/initrd_gen/initrd.img sysroot/boot/luhos.initrd
-echo "this is a file test" >> sysroot/filetxt
+cp -f apps/blank/blank.bin sysroot/bin/blank.bin

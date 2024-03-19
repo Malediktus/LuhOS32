@@ -31,6 +31,7 @@ task_t *task_new(struct _process *process)
     {
         task_head = task;
         task_tail = task;
+        current_task = task;
     }
     else
     {
@@ -98,13 +99,19 @@ uint32_t task_page()
 
 void task_run_first_task()
 {
-    if (!current_task)
+    if (!task_head)
     {
-        PANIC_PRINT("task_run_first_task: current_task is NULL");
+        PANIC_PRINT("task_run_first_task: task_head is NULL");
     }
 
+    current_task = task_head;
+
+    // TODO: this is just a workaround for now
+    // TODO: long term the kernel heap needs to be mapped into tasks page directories as well
+    task_registers_t regs;
+    memcpy(&regs, &task_head->registers, sizeof(task_registers_t));
     task_switch(task_head);
-    task_return(&task_head->registers);
+    task_return(&regs);
 }
 
 uint32_t task_init(task_t *task, struct _process *process)
@@ -118,6 +125,7 @@ uint32_t task_init(task_t *task, struct _process *process)
 
     task->registers.ip = KERNEL_TASK_VADDR;
     task->registers.ss = USER_DATA_SELECTOR;
+    task->registers.cs = USER_CODE_SELECTOR;
     task->registers.esp = KERNEL_TASK_STACK_VADDR;
 
     task->process = process;

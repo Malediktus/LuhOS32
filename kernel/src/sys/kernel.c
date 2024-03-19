@@ -20,6 +20,7 @@
 #include <kernel/fs/vfs.h>
 #include <kernel/fs/initrd.h>
 #include <kernel/fs/fat32.h>
+#include <kernel/process.h>
 
 #define KERNEL_ALLOCATOR_VADDR 0xFFFC0000
 #define KERNEL_ALLOCATOR_SIZE 0x40000
@@ -27,7 +28,7 @@
 extern uint32_t _kernel_start;
 extern uint32_t _kernel_end;
 
-static uint32_t *kernel_page_directory = 0;
+uint32_t *kernel_page_directory = 0;
 
 struct tss tss;
 
@@ -111,12 +112,11 @@ void kernel_main(unsigned long magic, unsigned long addr)
 
     kprintf("kernel booted from %s\n", bootloader_name);
 
-    uint32_t esp_value;
-    __asm__ volatile("movl %%esp, %0" : "=r"(esp_value)); // TODO: i dont know if this works
-    kprintf("esp: 0x%x\n", esp_value);
+    uint32_t ebp_value;
+    __asm__ volatile("movl %%ebp, %0" : "=r"(ebp_value));
 
     memset(&tss, 0, sizeof(struct tss));
-    tss.esp0 = esp_value;
+    tss.esp0 = ebp_value;
     tss.ss0 = KERNEL_DATA_SELECTOR;
 
     tss_load(0x28);
@@ -126,8 +126,6 @@ void kernel_main(unsigned long magic, unsigned long addr)
     {
         PANIC_CODE(kprintf("failed to initialize interrupts. error: %s\n", string_error(result)));
     }
-
-    enable_interrupts();
 
     result = page_alloc_init(mmap, mmap_size);
     if (result != EOK)
@@ -194,35 +192,17 @@ void kernel_main(unsigned long magic, unsigned long addr)
         PANIC_PRINT("no logical block device found");
     }
 
-    /*kprintf("reading initrd fs...\n");
-    fs_root = initialise_initrd(initrd_start);
-    int i = 0;
-    struct dirent *node = 0;
-    while ((node = readdir_fs(fs_root, i)) != 0)
+    fs_root = initialise_fat32(lbdevs[0]);
+
+    kprintf("running user program '/bin/blank.bin'\n");
+    process_t *proc = NULL;
+    result = process_load("/bin/blank.bin", &proc);
+    if (result != EOK)
     {
-        kprintf("%s", node->name);
-        fs_node_t *fsnode = finddir_fs(fs_root, node->name);
-        if ((fsnode->flags & 0x7) == FS_DIRECTORY)
-        {
-            kprintf(" (d)\n");
-        }
-        else
-        {
-            kprintf(" (f)\n");
-            char *buf = kmalloc(fsnode->filesize);
-            read_fs(fsnode, 0, fsnode->filesize, (uint8_t *)buf);
-            kprintf("%s\n", buf);
-            kfree(buf);
-        }
-
-        kfree(fsnode);
-
-        i++;
+        PANIC_CODE(kprintf("failed to load user program '/bin/blank.bin'\nerror code: %d\n", result));
     }
 
-    free_initrd();*/
-
-    fs_root = initialise_fat32(lbdevs[0]);
+    task_run_first_task();
 
     pci_instantiate_drivers();
     kprintf("\033[40m  \033[41m  \033[42m  \033[43m  \033[44m  \033[45m  \033[46m  \033[47m  \033[40;1m  \033[41;1m  \033[42;1m  \033[43;1m  \033[44;1m  \033[45;1m  \033[46;1m  \033[47;1m  \033[0m\n");
